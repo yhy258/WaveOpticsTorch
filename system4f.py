@@ -191,8 +191,8 @@ class Pupil4FLensSystem(nn.Module):
             #     phase_mask * self.wavelength[0] / self.wavelength[i]
             # ) # relative wavelength, N x N x 2
             
-            # TODO: WHat is da defocus_z? -> phase.cos + jphase.sin 
-            # maybe depth에 따른 phase difference인듯?
+            # phase.cos + jphase.sin 
+            # defocus_z : depth에 따른 phase difference
             defocus = ctensor_from_phase_angle(
                 defocus_phase_angles[i].squeeze(0).mul(defocus_z)
             ) # N x N 

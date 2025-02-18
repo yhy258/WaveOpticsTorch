@@ -123,6 +123,9 @@ def create_phase_mask(kx, ky, phase_mask_init=None):
     pixels = Pixels(kx, ky, pixels=phase_mask_init)
     return pixels
 
+def create_dataloader(test=False):
+    pass
+
 def create_reconstruction_networks():
     pass
 
@@ -130,8 +133,24 @@ def create_reconstruction_networks():
 def create_placeholder_reconstruction_networks():
     pass
 
+def initialize_optimizer(optdeconv, latest=None):
+    opt = optim.RAdam(
+        [
+            {
+                "params": optdeconv['placeholder_deconvs'].parameters(),
+                "lr": learning_rate,
+            },
+            {
+                "params": optdeconv["phase_mask"].parameters(), "lr": pm_learning_rate
+            }
+        ]
+    )
+    if latest is not None:
+        opt.load_state_dict(latest["opt_state_dict"])
+    return opt
 
-def initalize_microscope_reconstruction(latest=None, phase_mask_init=None):
+
+def initialize_4fsystem_reconstruction(latest=None, phase_mask_init=None):
     opts = create_4fsystems()
     pixels = create_phase_mask(opts[0].kx, opts[0].ky, phase_mask_init=phase_mask_init)
     deconvs = create_reconstruction_networks()
@@ -148,3 +167,65 @@ def initalize_microscope_reconstruction(latest=None, phase_mask_init=None):
         print("[info] loading from checkpoint")
         optdeconv.load_state_dict(latest["optdeconv_state_dict"], strict=True)
     return optdeconv
+
+def create_test_extents():
+    pass
+
+def train():
+    
+    # initialize model for training.
+    if os.path.exists("latest.pt"):
+        latest = torch.load("latest.pt")
+    else:
+        latest = None
+        
+        
+    optdeconv = initialize_4fsystem_reconstruction(latest=latest)
+    print(optdeconv)
+    
+    # initialize optimizer
+    optimizer = initialize_optimizer(optdeconv, latest=latest)
+
+
+    # initialize data
+    dataloader = create_dataloader()
+    val_dataloader = create_dataloader(test=True)
+    
+    #initialize test extents
+    extents = create_test_extents()
+    
+    # initialize iteration count
+    if latest is not None:
+        latest_iter = latest["it"]
+        losses = latest["mses"]
+        high_pass_losses = latest["high_pass_mses"]
+        regularized_losses = latest["regularized_losses"]
+        validate_losses = latest["validate_high_pass_mses"]
+    else:
+        latest_iter = 0
+        losses = []
+        high_pass_losses = []
+        regularized_losses = []
+        validate_losses = []
+        
+    if latest is not None:
+        del latest
+        torch.cuda.empty_cache()
+        
+        
+    # create mse loss
+    mse = nn.MSELoss()
+
+    # initialize iteration count
+    it = int(latest_iter)
+
+    # create folder for validation data
+    if not os.path.exists("snapshots/validate/"):
+        os.mkdir("snapshots/validate/")
+    val_dir = "snapshots/validate/"
+    
+    # TODO:
+    # train_psf()
+    
+    
+    

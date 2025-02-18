@@ -1,3 +1,5 @@
+from itertools import repeat
+
 import math
 import numpy as np
 import torch
@@ -45,9 +47,8 @@ def ctensor_from_numpy(input, dtype=T_DTYPE, device="cpu"):
 #     return output
 
 def ctensor_from_phase_angle(input):
-    real = input.cos().unsqueeze(-1)
-    imag = input.sin().unsqueeze(-1)
-    return real + 1j*imag
+    return torch.exp(1j * input)
+    
 
 
 # def cmul(x, y, xy=None):
@@ -161,3 +162,44 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
         )
         
     return ab
+
+
+### IMAGING UTILS
+def gaussian_kernel_2d(sigma, kernel_size, device="cpu"):
+    kernel_size = _pair(kernel_size)
+    y, x = torch.meshgrid(
+        (
+            torch.arange(kernel_size[0]).float(),
+            torch.arange(kernel_size[1]).float(),
+        )
+    )
+    y_mean = (kernel_size[0] - 1) / 2.0
+    x_mean = (kernel_size[1] - 1) / 2.0
+    kernel = 1
+    kernel *= (
+        1
+        / (sigma * math.sqrt(2 * math.pi))
+        * torch.exp(-(((y - y_mean) / (2 * sigma)) ** 2))
+    )
+    kernel *= (
+        1
+        / (sigma * math.sqrt(2 * math.pi))
+        * torch.exp(-(((x - x_mean) / (2 * sigma)) ** 2))
+    )
+    kernel = kernel / torch.sum(kernel)
+    kernel = kernel.to(device)
+    return kernel
+
+
+def _ntuple(n):
+    """Creates a function enforcing ``x`` to be a tuple of ``n`` elements."""
+
+    def parse(x):
+        if isinstance(x, tuple):
+            return x
+        return tuple(repeat(x, n))
+
+    return parse
+
+_pair = _ntuple(2)
+_single = _ntuple(1)
