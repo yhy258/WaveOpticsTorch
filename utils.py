@@ -105,8 +105,8 @@ def filter_IEEE_error(psf, otf):
     return otf
 
 
-# This should be edited.. -> complex computation does not require additional dimension.
 # a is sample, and b is psf.
+# Successfully verified this (The use of rfft and irfft)
 def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
     # sample : B, C, H, W or B, C, D, H, W = a
     # psf : D, N, N = b
@@ -115,48 +115,29 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
     bsize = b.size()
     
     if fftsize == None:
-        # 두개 합친 크기
+        # The added size.
         fftsize = [asize[-2] + bsize[-2] - 1, asize[-1] + bsize[-1] - 1]
         
     # a : B, C, H, W or B, C, D, H, W
     if fa is None:
         
-        fa = torch.fft.fftn(
+        fa = torch.fft.rfft2(
             F.pad(
                 a, (0, fftsize[-1] - asize[-1], 0, fftsize[-2] - asize[-2])
             ), dim=[-2, -1]
-        ) # B, ..., H + alpha, W + alpha ; complex value.
-        # fa = torch.fft(
-        #     F.pad(
-        #         a.unsqueeze(-1),
-        #         (0, 1, 0, fftsize[-1] - asize[-1], 0, fftsize[-2] - asize[-2])
-        #     ), # B, ..., H+alpha, W+alpha, 2
-        #     2,
-        # )
-        
+        )
     if fb is None:
-        fb = torch.fft.fftn(
-            F.pad(
-                b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
-            ), dim=[-2, -1]
-        ) # B, ..., H + alpha, W + alpha ; complex value.
+        paded_b = F.pad(
+            b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
+        )
+    
+        fb = torch.fft.rfft2(paded_b)
+        
         fb = filter_IEEE_error(F.pad(
                 b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
             ), fb)
-        # fb = torch.fft(
-        #     F.pad(
-        #         b.unsqueeze(-1),
-        #         (0, 1, 0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
-        #     ), # B, ..., H+alpha, W+alpha, 2
-        #     2,
-        # )
-        
-    ab = torch.fft.ifftn(fa * fb, dim=(-2, -1))
-    # ab = (
-    #     torch.fft.ifftn(fa * fb, dim=(-2, -1))
-    #     .index_select(-1, torch.tensor(0, device=fa.device))
-    #     .squeeze(-1)
-    # )
+    ab = torch.fft.irfft2(fa * fb, dim=(-2, -1), s=fftsize)
+    
     
     # crop based on shape
     if shape in "same":
@@ -178,4 +159,5 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
             ab,
             (-cropsizeL[-1], -cropsizeR[-1], -cropsizeL[-2], -cropsizeR[-2]),
         )
+        
     return ab
