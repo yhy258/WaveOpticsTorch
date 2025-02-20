@@ -243,4 +243,10 @@ class Pupil4FLensSystem(nn.Module):
         # psf : D, N, N
         im = fftconv2d(sample, psf, shape='same').sum(0)
         return im
-        
+                
+    def forward(self, *args, **kwargs):
+        return self.image(*args, **kwargs)
+            
+            
+def compute_power(psf, dk):
+    return (psf ** 2).sum(dim=(1, 2)) * dk ** 2

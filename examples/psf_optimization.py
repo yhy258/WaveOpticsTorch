@@ -13,8 +13,11 @@ import torch.optim as optim
 
 from system4f import Pupil4FLensSystem
 from optical_elements import *
+from core.models import *
 
 import logging
+from examples import opt4sys_train_psf as ctrl
+
 
 logging.basicConfig(filename='out.log', level=logging.DEBUG, format="%(message)s")
 
@@ -127,13 +130,69 @@ def create_dataloader(test=False):
     pass
 
 def create_reconstruction_networks():
-    pass
+    deconvs = []
+    planes_per_device = int(subsampled_num_planes / num_systems) # device별 planes.
+    for device in devices:
+        device_deconvs = [
+            FourierNet2D(
+                5, # the number of output channels of Fourier Layer.
+                (downsampled_num_pixels, downsampled_num_pixels),
+                1,
+                fourier_conv_args={"stride" : 2},
+                conv_kernel_sizes=[11],
+                input_scaling_mode="scaling",
+                quantile=0.5,
+                quantile_scale=1e-2,
+                device="cpu"
+            )
+            for p in range(planes_per_device)
+        ]
+        deconvs.extend(device_deconvs)
+    if len(deconvs) < subsampled_num_planes:
+        device_deconvs = [
+            FourierNet2D(
+                5,
+                (downsampled_num_pixels, downsampled_num_pixels),
+                1,
+                fourier_conv_args={"stride": 2},
+                conv_kernel_sizes=[11],
+                input_scaling_mode="scaling",
+                quantile=0.5,
+                quantile_scale=1e-2,
+                device="cpu",
+            )
+            for p in range(subsampled_num_planes - len(deconvs))
+        ]
+        deconvs.extend(device_deconvs)
+    deconvs = nn.ModuleList(deconvs)
+    return deconvs
 
 
 def create_placeholder_reconstruction_networks():
-    pass
+    # create multi gpu reconstruction network
+    deconvs = []
+    planes_per_device = int(subsampled_num_planes / num_systems)
+    for device in devices:
+        device_deconvs = [
+            FourierNet2D(
+                5,
+                (downsampled_num_pixels, downsampled_num_pixels),
+                1,
+                fourier_conv_args={"stride": 2},
+                conv_kernel_sizes=[11],
+                input_scaling_mode="scaling",
+                quantile=0.5,
+                quantile_scale=1e-2,
+                device=device, # device 별로 할당.
+            )
+            for p in range(num_grad_recon_planes)
+        ]
+        deconvs.append(nn.ModuleList(device_deconvs))
+    deconvs = nn.ModuleList(deconvs)
+    return deconvs
 
 def initialize_optimizer(optdeconv, latest=None):
+    ### This should be replaced with custom RAdam to use the params as dict form.
     opt = optim.RAdam(
         [
             {

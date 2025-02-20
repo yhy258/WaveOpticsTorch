@@ -10,6 +10,26 @@ NP_DTYPE = np.complex64
 T_DTYPE = torch.float32
 
 
+### CHECKPOINT UTILITIES
+def copy_params_(source, target):
+    for s, t in zip(source.parameters(), target.parameters()):
+        t.data.copy_(s.data)
+
+def copy_deconv_params_to_placeholder(num_systems, optdeconv, recon_chunk_zidxs):
+    for didx in range(num_systems):
+        for cidx, zidx in enumerate(recon_chunk_zidxs[didx]):
+            copy_params_(
+                optdeconv["deconvs"][zidx], optdeconv["placeholder_deconvs"][didx][cidx]
+            )
+
+def copy_placeholder_params_to_deconv(num_systems, optdeconv, recon_chunk_zidxs):
+    for didx in range(num_systems):
+        for cidx, zidx in enumerate(recon_chunk_zidxs[didx]):
+            copy_params_(
+                optdeconv["placeholder_deconvs"][didx][cidx], optdeconv["deconvs"][zidx]   
+            )
+    
+
 ### COORDINATE SYSTEM
 def cart2pol(x, y):
     rho = torch.sqrt(x ** 2 + y ** 2)
@@ -134,9 +154,10 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
     
         fb = torch.fft.rfft2(paded_b)
         
-        fb = filter_IEEE_error(F.pad(
-                b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
-            ), fb)
+        # fb = filter_IEEE_error(F.pad(
+        #         b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
+        #     ), fb)
+        fb = filter_IEEE_error(paded_b, fb)
     ab = torch.fft.irfft2(fa * fb, dim=(-2, -1), s=fftsize)
     
     
@@ -162,6 +183,57 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
         )
         
     return ab
+
+# a is sample, and b is psf.
+# Successfully verified this (The use of rfft and irfft)
+def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
+    # sample : B, C, H, W or B, C, D, H, W = a
+    # psf : D, N, N = b
+    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    asize = a.size()[::-1][:n]
+    bsize = b.size()[::-1][:n]
+    
+    if fftsize == None:
+        # The added size.
+        fftsize = [asz + bsz - 1 for asz, bsz in zip(asize, bsize)]
+        
+    # a : B, C, H, W or B, C, D, H, W
+    if fa is None:
+        padsize = ()
+        for fsz, asz in zip(fftsize, asize):
+            padsize += (0, fsz - asz)
+        fa = torch.fft.rfftn(F.pad(a, padsize), dim=transform_dims)
+
+    if fb is None:
+        padsize = ()
+        for fsz, bsz in zip(fftsize, bsize):
+            padsize += (0, fsz - bsz)
+        
+        paded_b = F.pad(b, padsize)
+    
+        fb = torch.fft.rfftn(paded_b, dim=transform_dims)
+        
+        fb = filter_IEEE_error(paded_b, fb)
+        
+    ab = torch.fft.irfftn(fa * fb, dim=transform_dims, s=fftsize)
+    
+    
+    # crop based on shape
+    if shape in "same":
+        cropsize = [fsz - asz for fsz, asz in zip(fftsize, asize)]
+        padsize = ()
+        for c in cropsize:
+            padsize += (-int(c / 2), -int((c + 1) / 2))
+        ab = F.pad(ab, padsize)
+    elif shape in "valid":
+        cropsize = [fsz - asz + bsz - 1 for fsz, asz, bsz in zip(fftsize, asize, bsize)]
+        padsize = ()
+        for c in cropsize:
+            padsize += (-int(c / 2), -int((c + 1) / 2))
+        ab = F.pad(ab, padsize)
+
+    return ab
+
 
 
 ### IMAGING UTILS
@@ -189,6 +261,19 @@ def gaussian_kernel_2d(sigma, kernel_size, device="cpu"):
     kernel = kernel / torch.sum(kernel)
     kernel = kernel.to(device)
     return kernel
+
+
+def high_pass_filter(vol, high_pass_kernel, use_3d=False):
+    if use_3d:
+        return fftconvnd(vol, high_pass_kernel, n=3, shape="same")
+    else:
+        return fftconv2d(vol, high_pass_kernel, shape="same") # return fftconvnd(vol, high_pass_kernel, n=2, shape="same") ??
+
+
+def poissonlike_gaussian_noise(im):
+    im = im + (im.sqrt()) * torch.randn_like(im)
+    im.clamp_(min=0.0)
+    return im
 
 
 def _ntuple(n):
