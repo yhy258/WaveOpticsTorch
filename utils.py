@@ -48,6 +48,17 @@ def combinatorial(n, k):
     """Calculates the combination C(n, k), i.e. n choose k."""
     return math.factorial(n) / (math.factorial(k) * math.factorial(n - k))
 
+def pearson_corr(x, y):
+    x = x - x.mean()
+    y = y - y.mean()
+    corr = (
+        torch.sum(x * y)
+        * torch.rsqrt(torch.sum(x ** 2))
+        * torch.rsqrt(torch.sum(y ** 2))
+    )
+    return corr
+
+
 ### COMPLEX OPERATIONS
 
 # def cabs2(x):

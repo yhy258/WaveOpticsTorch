@@ -14,6 +14,7 @@ from torch.cuda._utils import _get_device_index
 from utils import *
 from parallel_utils import gather, select_chunk_indices, take_chunk_indices, chunk_indices_diff, selective_scatter, parallel_apply
 from system4f import compute_power
+from core import augment
 
 
 def train_psf(
@@ -388,7 +389,320 @@ def train_psf(
         if it >= num_iterations:
             break
         
+def test_recon(
+    optdeconv,
+    dataloader,
+    defocus_range,
+    target_shape,
+    devices,
+    extents,
+    num_grad_recon_planes=None,
+    single_decoder=True,
+    input_3d=False,
+    im_function=None,
+    high_pass_kernel_size=11,
+    aperture_radius=None,
+    psf=None,
+    save_dir="./"
+):
+    # define constants
+    num_systems = len(devices)
+    chunk_size = int(len(defocus_range) / num_systems)
+    if len(defocus_range) % num_systems != 0:
+        chunk_size += 1
+    if num_grad_recon_planes is None:
+        num_grad_recon_planes = chunk_size
+    sections = [i * chunk_size for i in range(1, num_systems)]
+    defocus_ranges = np.split(defocus_range, sections)
+    zidxs = np.arange(len(defocus_range), dtype=np.uint64)
+    chunked_zidxs = np.split(zidxs, sections)
+    chunk_sizes = [len(zidxs) for zidxs in chunked_zidxs]
+    placeholders = "placeholder_deconvs" in optdeconv
+    if placeholders:
+        deconvs = optdeconv["placeholder_deconvs"]
+    else:
+        deconvs = optdeconv["deconvs"]
+
+    # define logging messages
+    log_string = "[{}] sample index: {}, loss: {} corr: {}\n"
+    profile_string = "[{}] {}\n"
+    log_fname = os.path.join(save_dir, "out.log")
+
+    # create mse loss
+    mse = nn.MSELoss()
+    
+    
+    if high_pass_kernel_size > 0:
+        with torch.no_grad():
+            ks = high_pass_kernel_size
+            delta_kernel = torch.zeros(ks, ks, device="cpu")
+            delta_kernel[int(ks / 2), int(ks / 2)] = 1.0
+            low_pass_kernel = gaussian_kernel_2d(
+                int(ks / 2) + 1, (ks, ks), device="cpu"
+            )
+            high_pass_kernel = delta_kernel - low_pass_kernel
+            high_pass_kernel = high_pass_kernel.expand(
+                num_grad_recon_planes, *high_pass_kernel.shape
+            )
+    else:
+        high_pass_kernel = None
         
+    with torch.no_grad():
+        if psf is None:
+            phase_mask_angle = optdeconv["phase_mask"]()
+            mirror_phase_mask_angle = phase_mask_angle
+            if "mirror" in optdeconv:
+                mirror_phase_mask_angle = mirror_phase_mask_angle + optdeconv["mirror"]().to(mirror_phase_mask_angle.device)
+            phase_mask = ctensor_from_phase_angle(mirror_phase_mask_angle).to(devices[0])
+            opt = optdeconv['opts'][0]
+            psf = torch.stack([opt.compute_psf(phase_mask, z) for z in defocus_range])
+            
+            crop = int(opt.pad / 2)
+            if crop > 0:
+                psf = psf[:, crop:-crop, crop:-crop]
+                psf = psf * opt.taper.expand_as(psf)
+            psf = F.avg_pool2d(
+                psf.unsqueeze(1), kernel_size=opt.downsample, divisor_override=1
+            ).squeeze(1)
+
+        print('psf sum', psf.sum())
+        
+    end_time = None
+    
+    counter = 0
+    
+    f = open(log_fname, "w")
+    
+    # select image planes
+    nograd_im_chunk_idxs = select_chunk_indices(
+        num_systems, chunk_sizes, num_per_chunk=None
+    )
+    nograd_im_zs = take_chunk_indices(defocus_ranges, nograd_im_chunk_idxs)
+    recon_chunk_idxs = select_chunk_indices(
+        num_systems, chunk_sizes, num_per_chunk=num_grad_recon_planes
+    )
+    recon_chunk_zidxs = take_chunk_indices(chunked_zidxs, recon_chunk_idxs)
+
+    # scatter psf using selected planes
+    nograd_im_psfs = selective_scatter(psf, nograd_im_chunk_idxs, devices)
+    
+    # initialize losses and correlations
+    losses, corrs = [], []
+    # test loop
+    for data in dataloader:
+        location = 0
+        for extent in extents[counter]:
+            with torch.no_grad():
+                start_time = time.perf_counter()
+                # remove batch dimension
+                sam = data[0]
+                # select location
+                sam = sam[
+                    extent[0][0] : extent[0][1],
+                    extent[1][0] : extent[1][1],
+                    extent[2][0] : extent[2][1],
+                ]
+                # select location
+                # apply aperture
+                if aperture_radius is not None:
+                    sam = augment.cylinder_crop(
+                        sam, aperture_radius, center="center", max_depth=sam.shape[0]
+                    )
+                    sam = torch.from_numpy(augment.pad_volume(sam, target_shape))
+                else:
+                    sam = torch.from_numpy(
+                        augment.pad_volume(sam.numpy(), target_shape)
+                    )
+                assert all(
+                    [s == t for s, t in zip(sam.shape, target_shape)]
+                ), "Shape must match"
+                if end_time is None:
+                    f.write(
+                        profile_string.format(start_time, "done loading new sample")
+                    )
+                else:
+                    f.write(
+                        profile_string.format(
+                            (start_time - end_time), "done loading new sample"
+                        )
+                    )
+                # image sample planes without grad in parallel on multiple gpu
+                nograd_im_sams = selective_scatter(sam, nograd_im_chunk_idxs, devices)
+                nograd_ims = parallel_apply(
+                    [fftconv2d for d in devices],
+                    [
+                        (sam, psf, None, None, "same")
+                        for (sam, psf) in zip(nograd_im_sams, nograd_im_psfs)
+                    ],
+                    devices,
+                    requires_grad=False,
+                )
+                nograd_ims = gather(nograd_ims, devices[0])
+                im = torch.sum(nograd_ims, axis=0)
+                # add shot noise to image
+                im = poissonlike_gaussian_noise(im)
+                if im_function is not None:
+                    # apply image function if specified
+                    im = im_function(im)
+                # reshape to add batch and channel dimensions for convolution
+                if input_3d:
+                    im = im.view(1, 1, 1, *im.shape)
+                else:
+                    im = im.view(1, 1, *im.shape)
+                image_time = time.perf_counter()
+                f.write(
+                    profile_string.format(
+                        (image_time - start_time), "done imaging sample"
+                    )
+                )
+                # select gradient reconstruction planes
+                selected_sams = selective_scatter(sam, recon_chunk_idxs, devices)
+                # calculate normalization factor
+                # apply high pass to sample if specified
+                if high_pass_kernel is not None:
+                    # high pass filter sams
+                    selected_sams = parallel_apply(
+                        [high_pass_filter for d in devices],
+                        [(sam, high_pass_kernel) for sam in selected_sams],
+                        devices,
+                        requires_grad=False,
+                    )
+                    normalization = torch.mean(
+                        gather(selected_sams, devices[0]) ** 2
+                    )
+                else:
+                    # calculate normalization factor only
+                    normalization = torch.mean(
+                        gather(selected_sams, devices[0]) ** 2
+                    )
+                if placeholders:
+                    # copy params into placeholders on multiple gpus
+                    copy_deconv_params_to_placeholder(
+                        num_systems, optdeconv, recon_chunk_zidxs
+                    )
+                # reconstruct planes with selective gradients in parallel on multiple gpus
+                # calculate distributed loss in same step
+                # TODO(dip): update this function for new call to chunk_recon_and_loss
+                # currently using a stopgap of reused arguments to make this work
+                scattered_recons, distributed_loss = zip(
+                    *parallel_apply(
+                        [chunk_recon_and_loss for device in devices],
+                        [
+                            (
+                                deconv,
+                                im,
+                                sam,
+                                sam,
+                                mse,
+                                0,
+                                high_pass_kernel,
+                                single_decoder,
+                                input_3d,
+                            )
+                            for (deconv, sam) in zip(deconvs, selected_sams)
+                        ],
+                        devices,
+                        requires_grad=False,
+                    )
+                )
+                recon = gather(scattered_recons, device=devices[0])
+                recon_time = time.perf_counter()
+                ignored_recons = zip(
+                    *parallel_apply(
+                        [chunk_recon for device in devices],
+                        [(deconv, im, single_decoder, input_3d) for deconv in deconvs],
+                        devices,
+                        requires_grad=False,
+                    )
+                )
+                ignored_recon_time = time.perf_counter()
+                for s in selected_sams:
+                    del s
+                f.write(
+                    profile_string.format(
+                        (recon_time - image_time),
+                        "done reconstructing sample and performing distributed loss backwards",
+                    )
+                )
+                f.write(
+                    profile_string.format(
+                        (ignored_recon_time - recon_time),
+                        "done only reconstructing for timing",
+                    )
+                )
+                # normalize loss
+                # TODO(dip): update the way we use the loss and variable names here
+                distributed_loss = [dl["high_pass_loss"] for dl in distributed_loss]
+                loss = torch.cuda.comm.reduce_add(
+                    distributed_loss, destination=_get_device_index(devices[0])
+                ) / len(distributed_loss)
+                # loss = (loss / normalization).detach().cpu().item()
+                losses.append(loss)
+                # calculate correlation
+                corr_sam = gather(selected_sams, device=devices[0])
+                corr = pearson_corr(recon, corr_sam).detach().cpu().item()
+                corrs.append(corr)
+                loss_time = time.perf_counter()
+                f.write(
+                    profile_string.format(
+                        (loss_time - recon_time), "done averaging loss"
+                    )
+                )
+                # save results
+                f.write(log_string.format(datetime.datetime.now(), counter, loss, corr))
+                torch.save(
+                    recon.detach().cpu(), f"{save_dir}/recon{counter}_{location}.pt"
+                )
+                torch.save(sam.detach().cpu(), f"{save_dir}/sam{counter}_{location}.pt")
+                torch.save(im.detach().cpu(), f"{save_dir}/im{counter}_{location}.pt")
+                location += 1
+                end_time = time.perf_counter()
+                f.write(
+                    profile_string.format((end_time - start_time), "done with loop")
+                )
+        # update data counter
+        counter += 1
+    f.close()
+    del psf
+    return losses
+
+def chunk_recon(deconvs, im, single_decoder=False, input_3d=False):
+    """
+    Reconstructs planes at given defocuses for the given image, where we have
+    no ground truth. Returns only the reconstructed 3D volume.
+
+    Args: deconvs: An nn.ModuleList of reconstruction networks per plane or a
+    single deconvolution module.
+
+        im: The 2D image (N=1, C, H W) which will be used to reconstruct from.
+
+        single_decoder (optional): Defaults to False, but if True then assume
+        deconvs is a single decoder instead of a list of decoders per plane.
+
+        input_3d (optional): Defaults to False, but if True then reconstruction
+        input expects 3D image (N=1, C, D, H, W) instead of a 2D image (N, C,
+        H, W).
+    """
+    if single_decoder:
+        # reconstruct chunk at once
+        # remove batch dimension
+        recon = deconvs(im)[0]
+        recon = recon.squeeze()
+        if len(recon.shape) < 3:
+            recon = recon.unsqueeze(0)
+    else:
+        # reconstruct planes separately
+        recon_planes = []
+        for deconv in deconvs:
+            # remove batch dimension
+            plane = deconv(im)[0]
+            plane = plane.squeeze()
+            if len(plane.shape) < 3:
+                plane = plane.unsqueeze(0)
+            recon_planes.append(plane)
+        # return chunk as tensor
+        recon = torch.cat(recon_planes)
+    return recon
 
 def chunk_recon_and_loss(
     deconvs,
