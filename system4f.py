@@ -26,6 +26,8 @@ def _list(x, repetitions=1):
 
 
 
+
+
 class Pupil4FLensSystem(nn.Module):
     def __init__(
         self,
@@ -107,8 +109,8 @@ class Pupil4FLensSystem(nn.Module):
         ) 
         self.k_range = [self.k[0], self.k[-1]]
         kx, ky = np.meshgrid(self.k, self.k) # (N x N)
-        self.register_buffer('kx', torch.tensor(kx, dtype=T_DTYPE, deivce=device))
-        self.register_buffer('ky', torch.tensor(ky, dtype=T_DTYPE, device=device))
+        self.register_buffer('kx', torch.tensor(kx, dtype=T_DTYPE).to(device))
+        self.register_buffer('ky', torch.tensor(ky, dtype=T_DTYPE).to(device))
         
         # create the pupil
         """

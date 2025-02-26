@@ -93,8 +93,11 @@ class FourierConv2D(nn.Module):
         else:
             self.kernel_size = kernel_size
         self.weight = nn.Parameter(
-            torch.Tensor(out_channels, in_channels, *self.kernel_size, dtype=torch.cfloat)
+            torch.zeros([out_channels, in_channels, *self.kernel_size], dtype=torch.cfloat)
         )
+        # self.weight = nn.Parameter(
+        #     torch.Tensor(out_channels, in_channels, *self.kernel_size, dtype=torch.cfloat)
+        # )
         self.reduce_channels = reduce_channels
         if bias and self.reduce_channels:
             self.bias = nn.Parameter(torch.Tensor(out_channels, 1, 1))
@@ -105,7 +108,7 @@ class FourierConv2D(nn.Module):
         self.reset_parameters()
         
     def reset_parameters(self):
-        init.kaiming_normal_(self.weight, a=math.sqrt(5))
+        init.kaiming_normal_(self.weight.real, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
             bound = 1 / math.sqrt(fan_in)
@@ -171,7 +174,7 @@ def FourierNet2D(
     fourier_kernel_size,
     num_planes, # z axis num.
     fourier_conv_args=None,
-    conv_kernel_size=[11],
+    conv_kernel_sizes=[11],
     conv_fmap_nums=None,
     input_scaling_mode="batchnorm",
     quantile=0.5,

@@ -137,6 +137,32 @@ def filter_IEEE_error(psf, otf):
     return otf
 
 
+def padded_fftnd(x, n=2):
+    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    xsize = x.size()[::-1][:n]
+    
+    fftsize = [xsz*2 - 1 for xsz in xsize]
+    
+    padsize = ()
+    for fsz, xsz in zip(fftsize, xsize):
+        padsize += (0, fsz - xsz)
+    fx = torch.fft.fftn(F.pad(x, padsize), dim=transform_dims)
+    return fx
+
+def unpadded_ifftnd(fx, n=2):
+    
+    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    fxsize = fx.size()[::-1][:n]
+    ifftsize = [(xsz+1)//2 for xsz in fxsize]
+
+    out = torch.fft.ifftn(fx, dim=transform_dims)
+    unpadsize = ()
+    for ifsz, fxsz in zip(ifftsize, fxsize):
+        unpadsize += (0, -(ifsz-fxsz))
+    x = F.pad(out, unpadsize)
+    return x
+    
+
 # a is sample, and b is psf.
 # Successfully verified this (The use of rfft and irfft)
 def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
@@ -274,6 +300,49 @@ def gaussian_kernel_2d(sigma, kernel_size, device="cpu"):
     return kernel
 
 
+
+
+def gaussian_kernel_3d(
+    sigma=1.0, kernel_size=(21, 21, 21), pixel_size=1.0, device="cpu"
+):
+    """Creates a 3D Gaussian kernel of specified size and pixel size."""
+    kernel_size = _triple(kernel_size)
+    sigma = _triple(sigma)
+    z, y, x = torch.meshgrid(
+        [
+            torch.linspace(
+                -(kernel_size[d] - 1) / 2,
+                (kernel_size[d] - 1) / 2,
+                steps=kernel_size[d],
+            )
+            * pixel_size
+            for d in range(3)
+        ]
+    )
+    kernel = 1
+    for d, s in zip([z, y, x], sigma):
+        d_mean = d[tuple(int(d.shape[i] / 2) for i in range(3))]
+        kernel *= (1 / (s * math.sqrt(2 * math.pi))) * torch.exp(
+            -(((d - d_mean) / (2 * s)) ** 2)
+        )
+    kernel = kernel / torch.sum(kernel)
+    return kernel.to(device)
+
+
+def gaussian_blur_3d(
+    vol3d,
+    sigma=1.0,
+    kernel_size=(21, 21, 21),
+    pixel_size=1.0,
+    kernel=None,
+    device="cpu",
+):
+    """Performs 3D blur using the specified kernel and FFT convolution."""
+    if kernel is None:
+        kernel = gaussian_kernel_3d(sigma, kernel_size, pixel_size, device)
+    return fftconvnd(vol3d, kernel, n=3, shape="same")
+
+
 def high_pass_filter(vol, high_pass_kernel, use_3d=False):
     if use_3d:
         return fftconvnd(vol, high_pass_kernel, n=3, shape="same")
@@ -297,5 +366,6 @@ def _ntuple(n):
 
     return parse
 
+_triple = _ntuple(3)
 _pair = _ntuple(2)
 _single = _ntuple(1)

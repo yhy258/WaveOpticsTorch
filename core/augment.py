@@ -2,6 +2,8 @@ import random
 import numpy as np
 import torch
 
+
+### TODO: Augment 기법들  공부 필요.
 def cylinder_crop(
     vol, radius, center=None, max_depth=101, valid_ratio=0.75, probability=1.0
 ):

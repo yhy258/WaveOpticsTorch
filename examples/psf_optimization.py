@@ -16,7 +16,9 @@ from optical_elements import *
 from core.models import *
 
 import logging
-from examples import opt4sys_train_psf as ctrl
+from examples import opt4fsys_train_psf as ctrl
+from examples import dataloaders as dl
+from examples import augment
 
 
 logging.basicConfig(filename='out.log', level=logging.DEBUG, format="%(message)s")
@@ -30,14 +32,14 @@ num_iterations = 1000000
 # setup the simulation parameters, make a 4f system.
 num_pixels = 2560
 pixel_size = 0.325
-num_systems = 8 # for parallelization
+num_systems = 2 # for parallelization
 num_planes = 256 
 downsample = 5
 plane_subsample = 4
 psf_pad = 1280
 taper_width = 5
 regularize_power = False
-devices = [torch.device(f'cuda:{i}') for i in range(num_planes)]
+devices = [torch.device(f'cuda:{i}') for i in range(num_systems)]
 
 # define SLM Parameters
 circle_NA = 0.8
@@ -80,7 +82,7 @@ downsampled_radius = int(0.5 * 386 / pixel_size / downsample) # maybe, 386 is di
 
 # set grad sizes
 # TODO: 이게 뭐지.
-num_grad_im_plnaes = 5
+num_grad_im_planes = 5
 num_grad_recon_planes = 5
 
 # create chunked defocus ranges
@@ -100,7 +102,7 @@ param_dict = dict(
     pixel_size = pixel_size,
     num_pixels = num_pixels,
     pad = psf_pad,
-    taper_wdith = taper_width,
+    taper_width = taper_width,
     downsample = downsample
 )
 
@@ -109,6 +111,75 @@ param_dicts = [
 ]
 
 ## TODO: augmentation info
+# create augmentations
+augmentations = augment.create_augmentations(
+    [
+        {
+            "name": "adjust_brightness",
+            "args": {
+                "scale": 52.8,
+                "background": (0, 60),
+                "brightness": (0.33, 3.0),
+                "log": False,
+            },
+        },
+        {"name": "rotate_pitch", "args": {"angle": (-5, 5)}},
+        {"name": "rotate_roll", "args": {"angle": (-10, 10)}},
+        {"name": "rotate_yaw", "args": {"angle": (-20, 20)}},
+        {
+            "name": "horizontal_jitter",
+            "args": {"jitter_amount": (0, 60), "direction": ("left", "right")},
+        },
+        {
+            "name": "flip_planes",
+            "args": {"allowed_flips": [0, 2], "num_flips": "random"},
+        },
+        {"name": "flip_volume", "args": {"probability": 0.5}},
+        {"name": "reflect_planes", "args": {"probability": 0.5}},
+        {
+            "name": "cylinder_crop",
+            "args": {
+                "radius": downsampled_radius,
+                "center": "center",
+                "max_depth": subsampled_num_planes,
+            },
+        },
+        {"name": "slice_crop", "args": {"num_planes": int(subsampled_num_planes / 10)}},
+        {
+            "name": "pad_volume",
+            "args": {
+                "target_shape": (
+                    subsampled_num_planes,
+                    downsampled_num_pixels,
+                    downsampled_num_pixels,
+                )
+            },
+        },
+    ]
+)
+augmentations = augment.compose_augmentations(augmentations)
+
+
+test_augmentations = augment.create_augmentations(
+    [
+        {
+            "name": "adjust_brightness",
+            "args": {"scale": 52.8, "background": 0, "brightness": 1, "log": False},
+        },
+        {"name": "slice_crop", "args": {"num_planes": int(subsampled_num_planes / 10)}},
+        {
+            "name": "pad_volume",
+            "args": {
+                "target_shape": (
+                    subsampled_num_planes,
+                    downsampled_num_pixels * 2,
+                    downsampled_num_pixels,
+                )
+            },
+        },
+    ]
+)
+test_augmentations = augment.compose_augmentations(test_augmentations)
 
 
 def create_4fsystems():
@@ -127,7 +198,70 @@ def create_phase_mask(kx, ky, phase_mask_init=None):
     return pixels
 
 def create_dataloader(test=False):
-    pass
+    base_path = '/data/joon/Dataset/FourierNetData/LarvalJebrafish/interpolated_1.625um'
+    # if not test:
+    if test == False:
+        dataset = dl.ConfocalVolumesDataset(
+            [
+                os.path.join(base_path, "zjabc_train/2019-12-10-6dpf-Huc-H2B-jRGECO"),
+                os.path.join(base_path, "zjabc_train/2019-12-16-5dpf-Huc-H2B-G7FF"),
+                os.path.join(base_path, "zjabc_train/2019-12-17-6dpf-Huc-H2B-G7FF"),
+                os.path.join(
+                    base_path,
+                    "zjabc_train/2020-02-25_abc-Elavl3-H2B-GCaMP+Cytosolic-GCaMP",
+                ),
+                os.path.join(base_path, "zjabc_train/2020-02-27_abc-Elavl3-H2B-GCaMP"),
+                os.path.join(
+                    base_path, "zjabc_train/2020-02-28_abc-Elval3-H2B-GCaMP+jRGECO"
+                ),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-01-5dpf-elavl3-H2B-jRGECO"
+                ),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-02-6dpf-elavl3-H2B-jRGECO"
+                ),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-03_abc-Elavl3-H2B-GC7f_gfapjRGECO1b"
+                ),
+                os.path.join(base_path, "zjabc_train/2020-03-03-Elavl3-H2B-GCaMP"),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-15-_Elavl3-H2B-GC7ff_gfapjRGECO1b"
+                ),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-17-Elavl3-H2B-GC7f_gfapjRGECO1b"
+                ),
+                os.path.join(
+                    base_path, "zjabc_train/2020-03-18-Elavl3-H2B-GC7f_gfapjRGECO1b"
+                ),
+            ],
+            shape=(num_planes, downsampled_num_pixels, downsampled_num_pixels),
+            location="random",
+            strategy="center",
+            bounds_roi="data",
+            valid_ratio=(0.5, 1.0, 0.1),
+            steps=(plane_subsample, 1, 1),
+            augmentations=augmentations,
+            balance=True,
+        )
+        dataloader = torch.utils.data.DataLoader(dataset, num_workers=8, shuffle=True)
+    else:
+        dataset = dl.ConfocalVolumesDataset(
+            [
+                os.path.join(
+                    base_path, "zjabc_test/2019-02-24_abc-Elavl3-H2B-GC7f_gfapjRGECO1b"
+                ),
+                os.path.join(base_path, "zjabc_test/2020-03-04-5dpf-elva3-H2B-jRGECO"),
+            ],
+            shape=(num_planes, downsampled_num_pixels * 2, downsampled_num_pixels),
+            location="center",
+            strategy="center",
+            bounds_roi="data",
+            steps=(plane_subsample, 1, 1),
+            augmentations=test_augmentations,
+            balance=False,
+        )
+        dataloader = torch.utils.data.DataLoader(dataset, num_workers=8, shuffle=False)
+    return dataloader
 
 def create_reconstruction_networks():
     deconvs = []
@@ -228,8 +362,55 @@ def initialize_4fsystem_reconstruction(latest=None, phase_mask_init=None):
     return optdeconv
 
 def create_test_extents():
-    pass
-
+    # define extents as list of lists of tuples of tuples
+    # len(extents) = number of samples in dataloader
+    # each item in extents is a list of locations in the sample
+    # each location is a tuple of dimensions
+    # each dimension is a tuple containing a start and end index
+    length = downsampled_radius * 2
+    extents = [
+        [
+            ((0, subsampled_num_planes), (280, 280 + length), (120, 120 + length)),
+            ((0, subsampled_num_planes), (600, 600 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (280, 280 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (550, 550 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (190, 190 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (400, 400 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (200, 200 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (500, 500 + length), (150, 150 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (155, 155 + length), (120, 120 + length)),
+            ((0, subsampled_num_planes), (400, 400 + length), (150, 150 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (190, 190 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (460, 460 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (230, 230 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (520, 520 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (230, 230 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (520, 520 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (190, 190 + length), (138, 138 + length)),
+            ((0, subsampled_num_planes), (460, 460 + length), (138, 138 + length)),
+        ],
+        [
+            ((0, subsampled_num_planes), (240, 240 + length), (120, 120 + length)),
+            ((0, subsampled_num_planes), (460, 460 + length), (138, 138 + length)),
+        ],
+    ]
+    return extents
 def train():
     
     # initialize model for training.
@@ -280,11 +461,50 @@ def train():
 
     # create folder for validation data
     if not os.path.exists("snapshots/validate/"):
-        os.mkdir("snapshots/validate/")
+        os.makedirs("snapshots/validate/", exist_ok=True)
     val_dir = "snapshots/validate/"
     
-    # TODO:
-    # train_psf()
+
+    ctrl.train_psf(
+        optdeconv,
+        optimizer,
+        dataloader,
+        defocus_range,
+        num_grad_im_planes,
+        num_grad_recon_planes,
+        devices,
+        losses,
+        high_pass_losses,
+        regularized_losses,
+        num_iterations,
+        single_decoder=False,
+        input_3d=False,
+        regularize_lost_power=regularize_lost_power,
+        high_pass_kernel_size=11,
+        low_pass_weight=0.1,
+        validate_losses=validate_losses,
+        validate_args={
+            "dataloader": val_dataloader,
+            "defocus_range": defocus_range,
+            "target_shape": (
+                subsampled_num_planes,
+                downsampled_num_pixels,
+                downsampled_num_pixels,
+            ),
+            "devices": devices,
+            "extents": extents,
+            "num_grad_recons_planes": num_grad_recon_planes,
+            "single_decoder": False,
+            "input_3d": False,
+            "high_pass_kernel_size": 11,
+            "aperture_radius": downsampled_radius,
+            "save_dir": val_dir,
+        },
+        it=it
+    )
     
     
-    
+if __name__ == "__main__":
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(map(str, range(3, num_systems+3)))
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0,5"
+    train()

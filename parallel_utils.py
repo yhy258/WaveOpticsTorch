@@ -101,6 +101,7 @@ def chunk_indices_diff(chunk_idxs, chunk_sizes):
     ]
 
 def take_chunk_indices(split_array, chunk_idxs):
+    # why don't we allocate the data to each device?
     ### Each chunk data: Split array [N * part_array]
     ### Selected indices in each chunk: chunk_idxs [N * partpart_indices_num]
     return [array[idxs] for array, idxs in zip(split_array, chunk_idxs)]
