@@ -1,5 +1,5 @@
 from itertools import repeat
-
+from functools import partial
 import math
 import numpy as np
 import torch
@@ -60,69 +60,25 @@ def pearson_corr(x, y):
 
 
 ### COMPLEX OPERATIONS
-
-# def cabs2(x):
-#     xabs2 = x.pow(2).sum(-1)
-#     return xabs2
-
 def ctensor_from_numpy(input, dtype=T_DTYPE, device="cpu"):
     real = torch.tensor(input.real, dtype=dtype, device=device).unsqueeze(-1)
     imag = torch.tensor(input.imag, dtype=dtype, device=device).unsqueeze(-1)
     output = torch.cat([real, imag], np.ndim(input))
     return output
 
-# def ctensor_from_phase_angle(input):
-#     real = input.cos().unsqueeze(-1)
-#     imag = input.sin().unsqueeze(-1)
-#     output = torch.cat([real, imag], input.ndimension())
-#     return output
-
 def ctensor_from_phase_angle(input):
     return torch.exp(1j * input)
-    
 
+def compute_intensity(field):
+    # field : B, C, H, W -> return : B, 1, H, W
+    return torch.sum(torch.abs(field) ** 2, dim=1, keepdim=True)
 
-# def cmul(x, y, xy=None):
-#     if xy is None:
-#         xy = torch.zeros_like(x)
-#     x2 = x.view(-1, 2)
-#     y2 = y.view(-1, 2)
-#     xy2 = xy.view(-1, 2)
-#     xy2[:, 0] = torch.mul(x2[:, 0], y2[:, 0]) - torch.mul(x2[:, 1], y2[:, 1])
-#     xy2[:, 1] = torch.mul(x2[:, 0], y2[:, 1]) + torch.mul(x2[:, 1], y2[:, 0])
-#     return xy
-
+def compute_power(field, pixel_size):
+    pixel_area = pixel_size * pixel_size
+    intensity = compute_intensity(field)
+    return torch.sum(intensity, dim=(-2, -1), keepdim=True) * pixel_area # B, 1, 1, 1
 
 ### FOURIER OPERATIONS
-
-
-# def fftshift(input, dim=1):
-#     split_size_right = int(np.floor(input.size(dim) / 2))
-#     split_sizes = (input.size(dim) - split_size_right, split_size_right)
-#     pos, neg = torch.split(input, split_sizes, dim=dim)
-#     input = torch.cat([neg, pos], dim=dim)
-#     return input
-
-
-# def ifftshift(input, dim=1):
-#     split_size_left = int(np.floor(input.size(dim) / 2))
-#     split_sizes = (split_size_left, input.size(dim) - split_size_left)
-#     pos, neg = torch.split(input, split_sizes, dim=dim)
-#     input = torch.cat([neg, pos], dim=dim)
-#     return input
-
-
-# def fftshift2d(input):
-#     for dim in [0, 1]:
-#         input = fftshift(input, dim=dim)
-#     return input
-
-
-# def ifftshift2d(input):
-#     for dim in [0, 1]:
-#         input = ifftshift(input, dim=dim)
-#     return input
-
 
 def filter_IEEE_error(psf, otf):
     n_ops = torch.sum(torch.tensor(psf.shape).type_as(psf) * torch.log2(torch.tensor(psf.shape).type_as(psf)))
@@ -162,7 +118,7 @@ def unpadded_ifftnd(fx, n=2):
     x = F.pad(out, unpadsize)
     return x
     
-
+###### CONVOLUTION THEOREM
 # a is sample, and b is psf.
 # Successfully verified this (The use of rfft and irfft)
 def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
@@ -271,6 +227,43 @@ def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
 
     return ab
 
+###### https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/convenience.py#L8
+###### Optical fft for 2F lens system... (Input is the collimated light)
+
+
+def optical_fft(field, grid, f_grid, lamb0, z, ref_idx):
+    """
+    Args:
+        field (Tensor, B, C, H, W): Input field of this system.
+        grid (Tensor, 2, H, W): Spatial grid
+        f_grid (Tensor, 2, H, W): Frequency grid
+        lamb0 (Tensor, C,): WAvelengths
+        z (float): Propagation distance
+        ref_idx (Int): Refractive Index
+        
+        # but only consider forward propagation.
+    """
+
+    L_sq = lamb0[None, :, None, None] * z / ref_idx # 1, C, 1, 1
+    
+    dx = torch.abs(grid[0, 1, 0] - grid[0, 0, 0])
+    dk = torch.abs(f_grid[0, 1, 0] - f_grid[0, 0, 0])
+    du = dk * L_sq
+    
+    norm_fft = -1j * dx * dx / L_sq # B, C, 1, 1
+    
+    fft_input = norm_fft * field # B, C, H, W
+    
+    spatial_dims = (-2, -1)
+    
+    fft = partial(torch.fft.fft2, dim=spatial_dims)
+    ifftshift = partial(torch.fft.ifftshift, dim=spatial_dims)
+    fftshift = partial(torch.fft.fftshift, dim=spatial_dims)
+    
+    fft_output = fftshift(fft(ifftshift(fft_input)))
+    
+    return fft_output
+ 
 
 
 ### IMAGING UTILS

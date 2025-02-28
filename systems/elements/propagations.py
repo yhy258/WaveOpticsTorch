@@ -1,22 +1,43 @@
 import os, sys
 sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 )
-import math
+
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.functional import Tensor
 from utils import padded_fftnd, unpadded_ifftnd
 
 
-__all__ = ['asm_propagation']
-
+class ASMPropagation(nn.Module):
+    def __init__(self, z, lamb0, ref_idx, Lx, Ly, f_grid, band_limited=True):
+        super(ASMPropagation, self).__init__()
+        self.z = z
+        self.lamb0 = lamb0
+        self.ref_idx = ref_idx
+        self.Lx = Lx
+        self.Ly = Ly
+        self.fx, self.fy = f_grid[0], f_grid[1]
+        self.band_limited = band_limited
+        
+    def forward(self, field):
+        return asm_propagation(
+            input_field=field,
+            z=self.z,
+            n=self.ref_idx,
+            lamb0=self.lamb0,
+            Lx=self.Lx,
+            Ly=self.Ly,
+            fx=self.fx,
+            fy=self.fy,
+            band_limited=self.band_limited
+        )
 
 def asm_propagation(input_field, z, n: float, lamb0: Tensor, Lx: float, Ly: float, fx: Tensor = None, fy: Tensor = None, band_limited: bool = True):
     propagator = asm_propagator(input_field, z, n, lamb0, Lx, Ly, fx, fy, band_limited)
     return field_propagate(input_field, propagator)
 
-# TODO: 어떻게 k - domain을 정의할 수 있는 지와 band-limited.. - 공부 및 검증필요.
 def asm_propagator(input_field, z, n: float, lamb0: Tensor, Lx: float, Ly: float, fx: Tensor = None, fy: Tensor = None, band_limited: bool = True):
     H, W = input_field.shape[-2:]
     transform_dims = -np.arange(1, 2+1)[::-1].tolist()

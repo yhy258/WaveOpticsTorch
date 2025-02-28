@@ -1,8 +1,12 @@
-# TODO : 검증 코드 생각.
-# TODO : 각도
-# TODO : coherent vs incoherent
-# TODO : ...
-
+"""
+    COHERENT vs INCOHERENT
+    1. COHERENT ILLUMINATION : ATF (the relationship between output amplitude and input ampliutde is linear with amplitude transfer function.)
+        F{AMP_OUTPUT} : ATF*F{AMP_INPUT}
+        |AMP_OUTPUT|^2 is detecteed on sensor.
+    2. INCOHERENT ILLUMINATION : OTF (the relationship between input intensity and output intensity is linear with optical transfer function; auto-correlation of ATF)
+        F{INT_OUTPUT} = OTF * F{INT_INPUT}
+        INT_OUTPUT is detected on sensor.
+"""
 
 import os, sys, math, datetime, glob, faulthandler
 sys.path.insert(
@@ -17,11 +21,23 @@ from torch.functional import Tensor
 
 from functools import partial
 
-from systems.functions.lenses import pointsource, planesource
-from systems.functions.propagations import asm_propagation
+import systems.elements as elem
 
 ############################## INTEGRATED OPTICAL SYSTEM.
 # only consider scalar field (disturbance, amplitude, ....)
+
+"""
+    TODO: PILOT SYSTEM ; 4F-system.
+        - Wrap the functionals with class!.
+    
+    TODO: 
+    1. Source 입력 O
+    2. Component [렌즈, Phase Mask, Pupil, ...] 혹은 Propagation 입력
+    3. Sensor 단 관측 O
+    
+"""
+
+
 class OpticalSystem(nn.Module):
     # unit : m
     # do not care "magnification"
@@ -70,7 +86,7 @@ class OpticalSystem(nn.Module):
             np.linspace(0, (Ny-1), Ny) - Ny / 2,
         )
         x, y = torch.from_numpy(x), torch.from_numpy(y)
-        return x * self.pixel_size, y * self.pixel_size
+        return torch.stack(x * self.pixel_size, y * self.pixel_size, dim=0) # 2, H, W
     
     def set_fgrid(self):
         # d : inverse of sampling rate. sampling rate : 1/Lx
@@ -80,91 +96,92 @@ class OpticalSystem(nn.Module):
         fx, fy = np.meshgrid(fx, fy)
 
         f_grid = (torch.from_numpy(fx), torch.from_numpy(fy))
-        return f_grid
+        return torch.stack(f_grid, dim=0) # 2, H< W
 
-        
-    def init_source(
+
+
+class Optical4FSystem(OpticalSystem):
+    def __init__(
         self,
-        mode: str = 'point',
-        z : float = 1.0, # (meter)
-        amplitude: complex = 1.,
-        power: float = 1.,
-        source_kwargs: dict = {}
+        pixel_size: float = 5e-6,
+        sensor_height_pixels: int = 1000,
+        sensor_width_pixels: int = 1000,
+        ### noise parameters
+        poisson_m: float = 0.,
+        gaussian_std: float = 1.,
+        ### wavelength in free space
+        lamb0: list = [], # chromaticity, meter.
+        refractive_index: float = 1., # Air = 1.
+        focal_length: float = None, # (m)
+        NA : float = None,
     ):
-        # mode : point, plane, phase (custom)
-        # point source - src_loc : list 
-        # plane source - angles (theta, phi) ; list
-
-        # source component's output : the phase profile in z distance.
-        assert mode in ["point", "plane", "phase"], f"The parameter mode should be in {['point', 'plane', 'phase']}"
+        super(Optical4FSystem, self).__init__(
+            pixel_size=pixel_size,
+            sensor_height_pixels=sensor_height_pixels,
+            sensor_width_pixels=sensor_width_pixels,
+            poisson_m=poisson_m,
+            gaussian_std=gaussian_std,
+            lamb0=lamb0,
+            refractive_index=refractive_index
+        )
         
-        # source_func input : amplitude, z, power
-        if mode.lower() == "point":
-            field = pointsource(
+        self.focal_length = focal_length
+        
+        #### Define sources or elements.
+        self.source = elem.PointSource(
                 grid=self.grid,
-                amplitude=amplitude,
-                lamb0=self.lamb0,
-                z=z,
-                ref_idx=self.refractive_index,
-                src_loc=source_kwargs["src_loc"],
-                power=power,
-            )
-            # source_func = partial(pointsource, grid=self.grid, lamb0=self.lamb0, ref_idx=self.refractive_index, src_loc=source_kwargs["src_loc"])
-        elif mode.lower() == "plane":
-            # planewave - option : angle of ... (kphase.)
-            field = planesource(
-                grid=self.grid,
-                amplitude=amplitude,
+                amplitude=1.0,
                 lamb0=self.lamb0,
                 ref_idx=self.refractive_index,
-                dir_factors=source_kwargs["dir_factors"],
-                power=power
+                z=focal_length,
+                src_loc=None, # center.
+                power=1.0,
+                paraxial=True
             )
-            # source_func = partial(planesource, grid=self.grid, lamb0=self.lamb0, ref_idx=self.refractive_index, dir_factors=source_kwargs["dir_factors"], dir_mode=source_kwargs["dir_mode"])
-        # elif mode.lower() == "phase":
-        #     # 임의의 phase가 들어왔을때, 단순 propagation ㅇㅇ..
-        #     pass
-        else:
-            raise Exception(f"Source type setting error. MODE: {mode}")
         
-        return field
-    
-    def propagation(
-        self,
-        input_field: Tensor, # B, C, H, W or B, C, D, H, W
-        z,
-        prop_type: str,
-        band_limited: bool,
-    ):
-        # ASM, Rayleigh
-        if prop_type.lower() == "asm":
-            # band-limited ..
-            out_field = asm_propagation(
-                input_field=input_field,
-                z=z,
-                n=self.refractive_index,
-                lamb0=self.lamb0,
-                Lx=self.Lx,
-                Ly=self.Ly,
-                fx=self.f_grid[0],
-                fy=self.f_grid[1],
-                band_limited=band_limited
-            )
-        # elif prop_type.lower() == "rayleigh_sommerfeld":
-        #     pass     
-        else:
-            raise Exception(f"Prop type setting error. PROP: {prop_type}")
+        self.lens_multp_phase = elem.MultConvergingLens(
+            grid=self.grid,
+            lamb0=self.lamb0,
+            ref_idx=self.refractive_index,
+            focal_length=focal_length,
+            NA=NA
+        )
         
-        return out_field
-    
-    def imaging(self, obj=None):
-        if obj == None:
-            ### only output psf (but intensity?)
-            ### maybe depending on the coherent or incoherent illumination setting.
-            pass
-        else:
-            ### psf -> sliding window.. (lets use fftnconv)
-            pass
-    
-    ## 중간에 component 넣는식?
-
+        self.prop = elem.ASMPropagation(
+            z=focal_length,
+            lamb0=self.lamb0,
+            ref_idx=self.refractive_index,
+            Lx=self.Lx,
+            Ly=self.Ly,
+            f_grid=self.f_grid,
+            band_limited=True
+        )
+        
+        ### PHASE MASK
+        
+        ### FF lens
+        self.fflens = elem.FFLens(
+            grid=self.grid,
+            f_grid=self.f_grid,
+            lamb0=self.lamb0,
+            ref_idx=self.refractive_index,
+            focal_length=focal_length,
+            NA=NA
+        )
+        
+        ### Sensor
+        self.sensor = elem.Sensor(
+            shot_noise_modes=["approximated_poisson", "gaussian"]
+        )
+        
+    def forward(self):
+        
+        field = self.source()
+        field = self.lens_multp_phase(field)
+        field = self.prop(field)
+        ## phase mask
+        
+        field = self.fflens(field)
+        
+        ### imaging
+        return self.sensor(field)
