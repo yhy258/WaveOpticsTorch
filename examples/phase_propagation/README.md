@@ -3,6 +3,7 @@
 ## Optical System
 ![Optical System](./figures/optsys_spt_fltr.png)
 
+Basically, this optical system is based on 4f-system.
 
 ## Experiments
 
