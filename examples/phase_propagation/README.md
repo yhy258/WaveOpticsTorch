@@ -19,14 +19,14 @@ where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ i
   
 - Based on the default setting, I set the pixel size as 5µm (this is beyond the sampling criterion)
 
-<img src="./figures/pixel5_550wvl.png" width="210"><img src="./figures/pixel5_1050wvl.png" width="210"><img src="./figures/pixel5_1550wvl.png" width="210">
+<img src="./figures/pixel5_550wvl.png" width="250"><img src="./figures/pixel5_1050wvl.png" width="250"><img src="./figures/pixel5_1550wvl.png" width="250">
 
 - These results demonstrate strange patterns... This is caused by aliasing error (according to the above sampling rate criterion.)
 
 #### 2. PSFs on Sensor with varying wavelengths
 **Pixel size = 1µm [Approximately equal to the sampling criterion]**
 
-<img src="./figures/pixel1_550wvl.png" width="210"><img src="./figures/pixel1_1050wvl.png" width="210"><img src="./figures/pixel1_1550wvl.png" width="210">
+<img src="./figures/pixel1_550wvl.png" width="250"><img src="./figures/pixel1_1050wvl.png" width="250"><img src="./figures/pixel1_1550wvl.png" width="250">
 
 - These results show ideal PSF pattern (Airy function with almost only the main lobe.)
 - However, in the 1.55µm wavelength setting, the propagator is entirely filtered because of the band-limit operation in ASM propagator.
