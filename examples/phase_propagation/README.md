@@ -11,8 +11,7 @@
 $$
 \Delta x \leq {\lambda\over 2 \text{NA}}
 $$
-
-where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$)$^{[1]}$.
+where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$).
 
 #### 1. PSFs on Sensor with varying wavelengths
 **Pixel size = 5µm [Beyond the sampling criterion]**
@@ -68,7 +67,5 @@ this_kwargs = dict(
 - Smaller wavelength settings demonstrate the larger number of orders of airy function.
 - At the glance, there is no change in tendency with various NA setting. But, it significantly impacts on the bounds and bandlimit conditions. I manipulated NA value and wavelength parameters to satisfy and approximate band-limited condition in both frequency (ASM propagator) and spatial domain (sampling rate).
 
-
-# Reference
-[1] Dep et al. - 2022 - FourierNets enable the design of highly non-local optical encoders for computational imaging.  
+[1] Dep et al. - 2022 - FourierNets enable the design of highly non-local optical encoders for computational imaging.
 [2] Matsushima and Shimobaba - 2009 - Band-limited angular spectrum method for numerical simulation of free-space propagation in far and near-fields.
