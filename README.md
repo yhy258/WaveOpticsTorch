@@ -24,6 +24,7 @@ OpticalEncoder/
 [ ] Verificaiton of utilization of GPU devices, and Parallelization  
 [ ] Scalable ASM (SAS)  
 [ ] Various phase initialization methods.  
+[ ] Considering magnification.  
 [ ] Considering shifted locations of sources or fields.  
 [ ] Considering various directions of the input fields.  
 [ ] More various examples.  

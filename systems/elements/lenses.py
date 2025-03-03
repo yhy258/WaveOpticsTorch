@@ -13,9 +13,6 @@ from utils import optical_fft
     2. Phase mask
     3. fflens
 """
-
-
-
 class MultConvergingLens(nn.Module):
     def __init__(self, grid, lamb0, ref_idx, focal_length, NA, epsilon=np.finfo(np.float32).eps):
         super(MultConvergingLens, self).__init__()
@@ -71,11 +68,6 @@ class FFLens(nn.Module):
             NA=self.NA
         )
         
-# thickness func : Delta (x, y)
-# Max thickneess : Delta_0
-
-# phase shift exp(jk\Delta_0)exp(jk(n-1)\Delta(x,y))
-
 class ThinLens(nn.Module):
     def __init__(self, lens_ref_idx: float, thickness: Tensor, focal_length: float, NA: float):
         super(ThinLens).__init__()
@@ -145,7 +137,6 @@ def fflens(field, grid, f_grid, lamb0, ref_idx, f, NA=None):
         field = field * pupil_mask[None, None ,: ,:]
     return optical_fft(field, grid, f_grid, lamb0, f, ref_idx)
     
-# TODO: Thin Thickness function? 
 def phase_mask(field, phase, grid, ref_idx, f, NA=None):
     
     if NA is not None:

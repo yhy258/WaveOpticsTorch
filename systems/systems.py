@@ -28,38 +28,9 @@ import systems.elements as elem
 from utils import set_spatial_grid, set_freq_grid, _list
 
 ############################## INTEGRATED OPTICAL SYSTEM.
-# only consider scalar field (disturbance, amplitude, ....)
-
-"""
-    
-    TODO: 
-    1. Source 입력 O
-    2. Component [렌즈, Phase Mask, Pupil, ...] 혹은 Propagation 입력
-    3. Sensor 단 관측 O
-    
-    TODO: Test code.
-    1. 4F system - FourierNet 동일 스펙
-    2. ASM Propagations ; phase visualization, ....
-    
-"""
-
-
-"""
-    If the propagaton method is Scalable ASM, the source grid should be different with the given target grid.
-    ### Usually, the criterion of the grid setting is the target grid (sensor grid.)
-    Therefore, we have to set the source grid according to the given target grid.
-    
-    
-    # Entire propagation method should get the grid parameter in forward section.
-    # This is because the grid can be continuously changed as propagating... (SAS Propagation..)
-"""
-
-# TODO: For entire elements, the grid parameter should input in forward function..
-# - grid parameter can be continuously changed by performing the simulation.
-#### CRITERION : height == x-axis, width == y-axis
 class OpticalSystem(nn.Module):
     # unit : µm
-    # do not care "magnification"
+    # still do not care "magnification"
     meter = 1e+6
     micrometers = 1
     nanometers = 1e-3
@@ -77,7 +48,7 @@ class OpticalSystem(nn.Module):
     ):
         super(OpticalSystem, self).__init__()
         
-        self.pixel_size = _list(pixel_size) # TODO: pixelsize list로 만들기.
+        self.pixel_size = _list(pixel_size)
         self.pixel_num = _list(pixel_num)
         
         self.poisson_m = poisson_m
@@ -89,14 +60,6 @@ class OpticalSystem(nn.Module):
         
         self.Lx = pixel_size[0] * pixel_num[0]
         self.Ly = pixel_size[1] * pixel_num[1]
-        
-        
-        ##### if scalable ASM or SFT-FR, we have to rescale the source grid...
-        ##### 1. Same pixel num (self.sensor_height_pixels, self.sensor_width_pixels)
-        ##### 2. Rescaled pixel size (dest_dx, dest_dy = lamb * z / self.Lx, lamb * z / self.Ly)
-        ##### self.Lx = pixel_size * sensor_height_pixels
-        ##### 3. Consequently, different size of the entire grid.
-        
         
         self.grid = self.set_grid()
         self.f_grid = self.set_fgrid()
@@ -158,7 +121,7 @@ class OpticalSystem(nn.Module):
         
         
 
-
+# Do not care this 4F system code. The example of spatially filtered PSF is a 4f-system.
 class Optical4FSystem(OpticalSystem):
     def __init__(
         self,
@@ -184,7 +147,6 @@ class Optical4FSystem(OpticalSystem):
         
         # Define inversely scaled source grid from target sensor grid
         # self.sas_rev_calculate_grids(zs=[focal_length]) 
-        
         
         self.focal_length = focal_length
         

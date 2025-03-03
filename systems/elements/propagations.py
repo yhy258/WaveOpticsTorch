@@ -10,8 +10,8 @@ from torch.functional import Tensor
 from utils import padded_fftnd, unpadded_ifftnd, shifted_fft, double_padnd, double_unpadnd, set_spatial_grid, set_freq_grid
 
 """
-    FIELD에 PADDING하고 이 Field 정보를 ASM에 사용한다. -> 2배 된 grid를 사용한다.
-    F-GRID -> 이로부터 도출된다. (2배 된 grid)
+    1. Padding the field to alleviate the circular convolution problem.
+    2. Define the f-grid using the padded field.
 """
 class ASMPropagation(nn.Module):
     def __init__(self, z, lamb0, ref_idx, dx, dy, band_limited=True):
@@ -68,11 +68,8 @@ class SASPropagation(nn.Module):
 def asm_propagation(input_field, z, n: float, lamb0: Tensor, dx: float, dy: float, band_limited: bool = True):
     input_field = double_padnd(input_field, n=2)
     propagator = asm_propagator(input_field, z, n, lamb0, dx, dy, band_limited)
-    # propagator's DC is at left-upper corner.
-    # input field's DC is at center.
     return field_propagate(input_field, propagator, ndim=2) # this function includes padding operations to alleviate circular convolution.
 
-#### Assume that the given field at center of spatial coord..
 def asm_propagator(input_field, z, n: float, lamb0: Tensor, dx: float, dy: float, band_limited: bool = True):
     H, W = input_field.shape[-2:]
     transform_dims = (-np.arange(1, 2+1)[::-1]).tolist()
@@ -257,6 +254,7 @@ def fourier_repr_fresnel_prop(input_field: Tensor, grid: Tensor, z: float, n: fl
     dest_grid_x, dest_grid_y = src_grid_x.unsqueeze(0) * mag_x[:, None, None], src_grid_y.unsqueeze(0) * mag_y[:, None, None]
     
     ### ASSUME : ENTIRE INPUTS ARE AT CENTER. THAT MEANS WHEN WE CONDUCT FOURIER TRANSFORM, WE HAVE TO FUNCTION IFFTSHIFT.
+    ### The reason why the above assumption is satisfied is that the inputs would be Fourier-transformed. This input-field have to be considered in Fourier domain.
     Q1 = torch.exp(1j * k[:, None, None] / (2*z) * (src_grid_x.unsqueeze(0) ** 2 + src_grid_y.unsqueeze(0) ** 2))  # C, H, W
     Q2_front = torch.exp(1j*k[:, None, None]*z)/(1j * lamb0[:, None, None]/n * z)
     Q2_end = torch.exp(1j * k[:, None, None] / (2*z) * (dest_grid_x ** 2 + dest_grid_y ** 2))  # C, H, W

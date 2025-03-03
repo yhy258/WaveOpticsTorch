@@ -102,10 +102,9 @@ def pointsource(grid, amplitude, lamb0, ref_idx, src_loc, z, power=1.0, paraxial
 
 
     phase = k * (phase_distance.unsqueeze(0)) # 1, C,  H, W
-    ### https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/sources.py#L67
     field = amplitude * 1/denom_distance * torch.exp(1j * phase)
     
-    
+    ### https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/sources.py - reflecting power parameter.    
     pixel_area = torch.abs(grid_x[1, 0] - grid_x[0, 0]) * torch.abs(grid_y[0, 1] - grid_y[0, 0])
     field_power = compute_power(field, pixel_area)
     powered_field = field * torch.sqrt(power / field_power)
@@ -116,7 +115,6 @@ def pointsource(grid, amplitude, lamb0, ref_idx, src_loc, z, power=1.0, paraxial
 
 
 
-### plane source X matter z.
 def planesource(grid, amplitude, lamb0, ref_idx, dir_factors, power=1.0):
     # k factors : 3, (different k factors)
     # The scale of these factors does not matter.
@@ -132,9 +130,7 @@ def planesource(grid, amplitude, lamb0, ref_idx, dir_factors, power=1.0):
         dir_x, dir_y, dir_z = dir_x/dir_l2norm, dir_y/dir_l2norm, dir_z/dir_l2norm
     else:
         dir_x, dir_y, dir_z = 0, 0, 1
-    
-    # dir_x, dir_y = dir_x[:, None, None, None], dir_y[:, None, None, None] # B, 1, 1, 1
-    
+
     # we do not have to consider the z factor because the phase is just relative...
     inner_dist = (dir_x * grid_x[None, None, :, :] + dir_y * grid_y[None, None, :, :])
     
