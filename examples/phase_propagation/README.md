@@ -11,6 +11,7 @@
 $$
 \Delta x \leq {\lambda\over 2 \text{NA}}
 $$
+
 where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$).
 
 #### 1. PSFs on Sensor with varying wavelengths
