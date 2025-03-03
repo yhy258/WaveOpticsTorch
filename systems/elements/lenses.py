@@ -17,7 +17,7 @@ from utils import optical_fft
 
 
 class MultConvergingLens(nn.Module):
-    def __init__(self, grid, lamb0, ref_idx, focal_length, NA, epsilon=1e-8):
+    def __init__(self, grid, lamb0, ref_idx, focal_length, NA, epsilon=np.finfo(np.float32).eps):
         super(MultConvergingLens, self).__init__()
         self.grid = grid
         self.lamb0 = lamb0
@@ -32,6 +32,7 @@ class MultConvergingLens(nn.Module):
         """
         Args:
             field (Tensor; B, C, H, W): INPUT SCALAR FIELD
+            C : chromatic dimension.
         """
         return multiplicative_phase_lens(
             field=field,
@@ -106,6 +107,7 @@ class ThinLens(nn.Module):
         
 
 ## pupil functions (based on https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/pupils.py#L7)
+### in small size, circular pupil would not be circularly symmetric
 def circular_pupil(grid, d): # d is the diameter
     # grid: 2, H, W
     l2norm_grid = torch.sum(grid ** 2, dim=0) # H, W
@@ -116,7 +118,7 @@ def square_pupil(field, w): # w : width
     mask = torch.max(torch.abs(field), dim=0) <= w/2
     return mask
 
-def multiplicative_phase_lens(field, grid, lamb0, ref_idx, f, NA=None, epsilon=1e-8):
+def multiplicative_phase_lens(field, grid, lamb0, ref_idx, f, NA=None, epsilon=np.finfo(np.float32).eps):
     """
         t_l(x,y) = exp(jk/(2f) * (x^2 + y^2))
     """

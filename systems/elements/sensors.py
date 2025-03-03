@@ -11,24 +11,25 @@ from utils import compute_intensity
 
 
 class Sensor(nn.Module):
-    def __init__(self, shot_noise_modes, clip=(1e-20, 1.)):
+    def __init__(self, shot_noise_modes, clip=(1e-20, 1.), channel_sum=True):
         super(Sensor, self).__init__()
         self.shot_noise_modes = shot_noise_modes
         self.clip = clip
+        self.channel_sum = channel_sum
         
     def forward(self, field):
-        return sensor(field, self.shot_noise_modes, self.clip)
+        return sensor(field, self.shot_noise_modes, self.clip, self.channel_sum)
         
 
 
-def sensor(field, shot_noise_modes, clip):
+def sensor(field, shot_noise_modes, clip, channel_sum=True):
     
-    intensity = compute_intensity(field)
+    intensity = compute_intensity(field, sum=channel_sum)
     
     if isinstance(shot_noise_modes, str):
-        shot_noises = list(shot_noises)
+        shot_noise_modes = list(shot_noise_modes)
     
-    for sn in shot_noises:
+    for sn in shot_noise_modes:
         if sn == "gaussian":
             intensity = gaussian_noise(intensity)
         elif sn == "poisson":

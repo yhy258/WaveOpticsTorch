@@ -10,6 +10,15 @@ NP_DTYPE = np.complex64
 T_DTYPE = torch.float32
 
 
+def _list(x, repetitions=1):
+    if hasattr(x, "__iter__") and not isinstance(x, str):
+        return x
+    else:
+        return [
+            x,
+        ] * repetitions
+
+
 ### CHECKPOINT UTILITIES
 def copy_params_(source, target):
     for s, t in zip(source.parameters(), target.parameters()):
@@ -42,6 +51,24 @@ def pol2cart(rho, theta):
     y = rho * torch.sin(theta)
     return x, y
 
+def set_spatial_grid(H, W, dx, dy):
+    grid_x, grid_y = np.meshgrid(
+        np.linspace(0, (H-1), H) - H / 2,
+        np.linspace(0, (W-1), W) - W / 2, indexing='ij'
+    )
+    grid = torch.stack((torch.from_numpy(grid_x)*dx, torch.from_numpy(grid_y)*dy), dim=0)
+    grid.requires_grad_(False) 
+    return grid # Tensor (2, H, W)
+
+def set_freq_grid(H, W, dx, dy):
+    fx, fy = np.meshgrid(
+        np.fft.fftshift(np.fft.fftfreq(H, dx)), 
+        np.fft.fftshift(np.fft.fftfreq(W, dy)), indexing='ij'
+    )
+    f_grid = torch.stack((torch.from_numpy(fx), torch.from_numpy(fy)), dim=0)
+    f_grid.requires_grad_(False) 
+    return f_grid
+    
 
 ### MATH
 def combinatorial(n, k):
@@ -69,12 +96,14 @@ def ctensor_from_numpy(input, dtype=T_DTYPE, device="cpu"):
 def ctensor_from_phase_angle(input):
     return torch.exp(1j * input)
 
-def compute_intensity(field):
+def compute_intensity(field, sum=True):
     # field : B, C, H, W -> return : B, 1, H, W
-    return torch.sum(torch.abs(field) ** 2, dim=1, keepdim=True)
+    if sum:
+        return torch.sum(torch.abs(field) ** 2, dim=1, keepdim=True)
+    else:
+        return torch.abs(field) ** 2
 
-def compute_power(field, pixel_size):
-    pixel_area = pixel_size * pixel_size
+def compute_power(field, pixel_area):
     intensity = compute_intensity(field)
     return torch.sum(intensity, dim=(-2, -1), keepdim=True) * pixel_area # B, 1, 1, 1
 
@@ -92,30 +121,33 @@ def filter_IEEE_error(psf, otf):
     )
     return otf
 
-
-def padded_fftnd(x, n=2):
-    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+def double_padnd(x, n=2):
     xsize = x.size()[::-1][:n]
-    
     fftsize = [xsz*2 - 1 for xsz in xsize]
-    
     padsize = ()
     for fsz, xsz in zip(fftsize, xsize):
         padsize += (0, fsz - xsz)
-    fx = torch.fft.fftn(F.pad(x, padsize), dim=transform_dims)
+    return F.pad(x, padsize)
+
+def double_unpadnd(x, n=2):
+    fxsize = x.size()[::-1][:n]
+    ifftsize = [(xsz+1)//2 for xsz in fxsize]
+    unpadsize = ()
+    for ifsz, fxsz in zip(ifftsize, fxsize):
+        unpadsize += (0, -abs(ifsz-fxsz))
+    x = F.pad(x, unpadsize)
+    return x
+    
+def padded_fftnd(x, n=2):
+    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    x = double_padnd(x, n=n)
+    fx = torch.fft.fftn(x, dim=transform_dims)
     return fx
 
 def unpadded_ifftnd(fx, n=2):
-    
-    transform_dims = -np.arange(1, n+1)[::-1].tolist()
-    fxsize = fx.size()[::-1][:n]
-    ifftsize = [(xsz+1)//2 for xsz in fxsize]
-
+    transform_dims = (-np.arange(1, n+1)[::-1]).tolist()
     out = torch.fft.ifftn(fx, dim=transform_dims)
-    unpadsize = ()
-    for ifsz, fxsz in zip(ifftsize, fxsize):
-        unpadsize += (0, -(ifsz-fxsz))
-    x = F.pad(out, unpadsize)
+    x = double_unpadnd(out, n=n)
     return x
     
 ###### CONVOLUTION THEOREM
@@ -231,6 +263,13 @@ def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
 ###### Optical fft for 2F lens system... (Input is the collimated light)
 
 
+def shifted_fft(x, spatial_dims=(-2, -1)):
+    fft = partial(torch.fft.fft2, dim=spatial_dims)
+    ifftshift = partial(torch.fft.ifftshift, dim=spatial_dims)
+    fftshift = partial(torch.fft.fftshift, dim=spatial_dims)
+    return fftshift(fft(ifftshift(x)))
+
+
 def optical_fft(field, grid, f_grid, lamb0, z, ref_idx):
     """
     Args:
@@ -256,11 +295,7 @@ def optical_fft(field, grid, f_grid, lamb0, z, ref_idx):
     
     spatial_dims = (-2, -1)
     
-    fft = partial(torch.fft.fft2, dim=spatial_dims)
-    ifftshift = partial(torch.fft.ifftshift, dim=spatial_dims)
-    fftshift = partial(torch.fft.fftshift, dim=spatial_dims)
-    
-    fft_output = fftshift(fft(ifftshift(fft_input)))
+    fft_output = shifted_fft(fft_input, spatial_dims=spatial_dims)
     
     return fft_output
  
@@ -362,3 +397,15 @@ def _ntuple(n):
 _triple = _ntuple(3)
 _pair = _ntuple(2)
 _single = _ntuple(1)
+
+# #%%
+# import numpy as np
+
+# x1 = np.linspace(1, 5, 5)
+# y1 = np.linspace(6, 10, 5)
+
+# x2, y2 = np.meshgrid(x1, y1, indexing='ij')
+# print(x1, y1)
+# # %%
+# x2, y2
+# %%
