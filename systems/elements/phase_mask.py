@@ -85,7 +85,7 @@ class PhaseMaskQuantized(nn.Module):
         super().__init__()
         self.levels = levels
         
-        init_phase = 2*np.pi*torch.rand_like(grid)
+        init_phase = 2*np.pi*torch.rand_like(grid[0]) # H, W
         self.phase_raw = nn.Parameter(init_phase) 
 
     def forward(self, field, modulo: bool = False):
@@ -103,7 +103,7 @@ class PhaseMaskQuantized(nn.Module):
         # Make phase shifter
         phase = torch.exp(1j * phase_quant)
         
-        out = field * phase
+        out = field * phase[None, None, :, :] # 1, 1, H, W
         
         return out
     

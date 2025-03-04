@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import systems.elements as elem
 from systems.systems import OpticalSystem
-from systems.utils import _pair, requires_grad_detach
+from systems.utils import _pair
 
 
 def nyquist_pixelsize_criterion(NA, lamb):
@@ -103,112 +103,33 @@ class SpatialFilteredPSF(OpticalSystem):
         out = self.sensor(ff_field)
         print(f"Output Field's shape : {out.shape}")
         return unpowered_src_field, src_field, multp_field, prop_field, pinhole_field, ff_field, out
-
-
-class OpticalPropagation(OpticalSystem):
-    def __init__(
-        self,
-        pixel_size=[5, 5],
-        pixel_num=[100, 100],
-        lamb0=[0.55, 1.05, 1.550],
-        refractive_index=1,
-        input_field_mode='point',
-        paraxial=False,
-        dir_factor=[0,0,0],
-        focal_length=19*1e3,
-        NA=0.3,
-        propagation='asm',
-        nyquist_spatial_bound=True,
-    ):
-        super(OpticalPropagation, self).__init__(
-            pixel_size=pixel_size,
-            pixel_num=pixel_num,
-            lamb0=lamb0,
-            refractive_index=refractive_index
-        )
-        max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
-        print("Max Pixel Size : ", max_pixel_size)
-        print("Now Pixel Size : ", pixel_size)
-        if max(pixel_size) > max_pixel_size and nyquist_spatial_bound:
-            pixel_size = _pair(max_pixel_size)
-            self.pixel_size = pixel_size
-            self.init_grid_params()
-            
-        if propagation == 'asm':
-            self.prop = elem.ASMPropagation(
-                z=focal_length,
-                lamb0=self.lamb0,
-                ref_idx=self.refractive_index,
-                dx=self.pixel_size[0],
-                dy=self.pixel_size[1],
-                band_limited=True
-            )
-            
-        self.phase_mask = elem.PhaseMaskQuantized(self.grid, levels=4)
-            
-        ##### Input field should be defined after defining propagation (SAS - redefine source grid..)
-        if input_field_mode == 'point':
-            self.source = elem.PointSource(
-                grid=self.grid,
-                amplitude=1.0,
-                lamb0=self.lamb0,
-                ref_idx=self.refractive_index,
-                z=focal_length,
-                src_loc=None, # center.
-                power=1.0,
-                paraxial=paraxial
-            )
-            
-        elif input_field_mode == "plane":
-            self.source = elem.PlaneSource(
-                grid=self.grid,
-                amplitude=1.,
-                lamb0=self.lamb0,
-                ref_idx=self.refractive_index,
-                power=1.,
-                dir_factors=dir_factor
-            )
     
-        
-        self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9],channel_sum=False)    
     
-    def forward(self):
-        unpowered_src_field, src_field = self.source()
-        H, W = src_field.shape[-2:]
-        print(f"Field's shape before propagation: {src_field.shape}")
-        mod_field = self.phase_mask(src_field)
-        print(f"Phase Modulated Field's shape before propagation: {src_field.shape}")
-        field = self.prop(mod_field)
-        if isinstance(field, list) or isinstance(field, tuple): # SASPropagation.
-            field, pixel_size = field
-        print(f"Field's shape after propagation: {field.shape}")    
-        out = self.sensor(field)
-        print(f"Output Field's shape : {out.shape}")
-        return unpowered_src_field, src_field, mod_field, out
+# 다양한 Propagation distance, Wavelengths, Pixelsize, NA에 대해 ㄱㄱ?
+# Lambda : 0.4, 0.55, 0.7
+# Propagation distance : z
+# NA : 0.1, 0.3, 0.5
+# Pixel size : Nyquist spatial bound x
 
 def make_kwargs(lamb0, NA):
     this_kwargs = dict(
         pixel_size=[0.5, 0.5],
         pixel_num=[300, 300],
         lamb0=[lamb0],
-        input_field_mode='point',
         refractive_index=1,
         paraxial=False,
-        dir_factor=[0,0,0],
         focal_length=1*1e3,
         NA=NA,
-        propagation='asm',
+        pinhole_width=100,
         nyquist_spatial_bound=False
     )
-
     return this_kwargs
     
 def iterative_perform_(kwargss: list):
     outs = {}
     for kwargs in kwargss:
-        Prop = OpticalPropagation(**kwargs)
-        _, _, _, out = Prop()
-        out = requires_grad_detach(out)
+        Prop = SpatialFilteredPSF(**kwargs)
+        unpowered_src_field, src_field, multp_field, prop_field, pinhole_field, ff_field, out = Prop()
         #### Visualization code.
         #### Out field instantly save in list.
         #### Show the figures in grid!
@@ -244,25 +165,22 @@ def iterative_perform(save_root, file_name):
 
 
 if __name__ == "__main__":
-    Prop = OpticalPropagation(
-        pixel_size=[1, 1],
-        pixel_num=[1000, 1000],
-        lamb0=[0.55, 1.05, 1.550],
-        refractive_index=1,
-        input_field_mode='point',
-        paraxial=False,
-        dir_factor=[0,0,0],
-        focal_length=19*1e3,
-        NA=0.3,
-        propagation='asm',
-        nyquist_spatial_bound=True,
+    Prop = SpatialFilteredPSF(
+            pixel_size=[1, 1],
+            pixel_num=[1000, 1000],
+            lamb0=[0.55, 1.05, 1.550],
+            refractive_index=1,
+            paraxial=False,
+            focal_length=19*1e3,
+            NA=0.3,
+            nyquist_spatial_bound=True
     )
-    unpowered_src_field, src_field, mod_field, out = map(requires_grad_detach, Prop())
+    unpowered_src_field, src_field, multp_field, prop_field, pinhole_field, ff_field, out = Prop()   
     
     this_grid = Prop.grid
     
     import matplotlib.pyplot as plt
-    save_root = "./phase_prop_vis/diffuse_prop"
+    save_root = "./phase_prop_vis/spatial_fltr"
     os.makedirs(save_root, exist_ok=True)
     lamb0 = Prop.lamb0 # list
     ### visualize function
@@ -277,15 +195,25 @@ if __name__ == "__main__":
         plt.colorbar()
         plt.savefig(os.path.join(save_root, file_name))
         plt.clf()
-    
+        
     visualize("Radial Grid", torch.sum(this_grid**2, dim=0), "Radial GRID x**2 + y**2", mode='abs')
     
     file_name_format = "{}_field_{}.png"
     title_format = "{} field of Lambda : {}"
     
-    visualize(file_name_format.format('mod_field', torch.round(lamb0[0]/Prop.nanometers)), mod_field[0, 0], title=title_format.format("mod_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
-    visualize(file_name_format.format('mod_field', torch.round(lamb0[1]/Prop.nanometers)), mod_field[0, 1], title=title_format.format("mod_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
-    visualize(file_name_format.format('mod_field', torch.round(lamb0[2]/Prop.nanometers)), mod_field[0, 2], title=title_format.format("mod_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
+    # visualize(file_name_format.format('unpowered_source', torch.round(lamb0[0]/Prop.nanometers)), unpowered_src_field[0, 0], title=title_format.format("Unpowered Source", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    # visualize(file_name_format.format('unpowered_source', torch.round(lamb0[1]/Prop.nanometers)), unpowered_src_field[0, 1], title=title_format.format("Unpowered Source", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
+    # visualize(file_name_format.format('unpowered_source', torch.round(lamb0[2]/Prop.nanometers)), unpowered_src_field[0, 2], title=title_format.format("Unpowered Source", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('multp_field', torch.round(lamb0[0]/Prop.nanometers)), multp_field[0, 0], title=title_format.format("multp_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('prop_field', torch.round(lamb0[0]/Prop.nanometers)), prop_field[0, 0], title=title_format.format("prop_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('pinhole_field', torch.round(lamb0[0]/Prop.nanometers)), pinhole_field[0, 0], title=title_format.format("pinhole_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('ff_field', torch.round(lamb0[0]/Prop.nanometers)), ff_field[0, 0], title=title_format.format("ff_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    
+    visualize(file_name_format.format('multp_field', torch.round(lamb0[2]/Prop.nanometers)), multp_field[0, 2], title=title_format.format("multp_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('prop_field', torch.round(lamb0[2]/Prop.nanometers)), prop_field[0, 2], title=title_format.format("prop_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('pinhole_field', torch.round(lamb0[2]/Prop.nanometers)), pinhole_field[0, 2], title=title_format.format("pinhole_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
+    visualize(file_name_format.format('ff_field', torch.round(lamb0[2]/Prop.nanometers)), ff_field[0, 2], title=title_format.format("ff_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
+    
     
     visualize(file_name_format.format('source', torch.round(lamb0[0]/Prop.nanometers)), src_field[0, 0], title=title_format.format("Source", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
     visualize(file_name_format.format('source', torch.round(lamb0[1]/Prop.nanometers)), src_field[0, 1], title=title_format.format("Source", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
@@ -294,6 +222,5 @@ if __name__ == "__main__":
     visualize(file_name_format.format('sensor', torch.round(lamb0[0]/Prop.nanometers)), out[0, 0], title=title_format.format("Sensor", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('sensor', torch.round(lamb0[1]/Prop.nanometers)), out[0, 1], title=title_format.format("Sensor", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('sensor', torch.round(lamb0[2]/Prop.nanometers)), out[0, 2], title=title_format.format("Sensor", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
-    
     
     iterative_perform(save_root, 'wvl_NA_grid_fig.png')

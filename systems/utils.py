@@ -3,6 +3,7 @@ from functools import partial
 import math
 import numpy as np
 import torch
+from torch.functional import Tensor
 import torch.nn.functional as F
 
 
@@ -37,7 +38,12 @@ def copy_placeholder_params_to_deconv(num_systems, optdeconv, recon_chunk_zidxs)
             copy_params_(
                 optdeconv["placeholder_deconvs"][didx][cidx], optdeconv["deconvs"][zidx]   
             )
-    
+            
+def requires_grad_detach(x):
+    if isinstance(x, Tensor):
+        if x.requires_grad:
+            return x.detach()
+    return x
 
 ### COORDINATE SYSTEM
 def cart2pol(x, y):

@@ -77,7 +77,7 @@ this_kwargs = dict(
 )
 ```
 - Propagation distance is smaller than the default setting.
-- I set the pinhole_width as a large value, 100µm, to clearly show the various orders of the airy funcion.
+- **I set the pinhole_width as a large value, 100µm, to clearly show the various orders of the airy funcion.**
 - Smaller wavelength settings demonstrate the larger number of orders of airy function.
 - At the glance, there is no change in tendency with various NA setting. But, it significantly impacts on the bounds and bandlimit conditions. I manipulated NA value and wavelength parameters to satisfy and approximate band-limited condition in both frequency (ASM propagator) and spatial domain (sampling rate).
 
