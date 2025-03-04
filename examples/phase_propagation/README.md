@@ -1,5 +1,7 @@
 # Spatial Filtered PSF
 
+The code is at `spatial_fltr_psf.py` in this directory.
+
 ## Optical System
 ![Optical System](./figures/optsys_spt_fltr.png)
 
