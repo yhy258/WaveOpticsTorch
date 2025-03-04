@@ -83,7 +83,7 @@ class SpatialFilteredPSF(OpticalSystem):
             NA=NA
         )
         
-        self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9],channel_sum=False)    
+        self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
     
     def forward(self):
         unpowered_src_field, src_field = self.source()
@@ -171,16 +171,17 @@ if __name__ == "__main__":
             lamb0=[0.55, 1.05, 1.550],
             refractive_index=1,
             paraxial=False,
-            focal_length=19*1e3,
+            focal_length=10*1e3,
             NA=0.3,
-            nyquist_spatial_bound=True
+            pinhole_width=20,
+            nyquist_spatial_bound=False
     )
     unpowered_src_field, src_field, multp_field, prop_field, pinhole_field, ff_field, out = Prop()   
     
     this_grid = Prop.grid
     
     import matplotlib.pyplot as plt
-    save_root = "./phase_prop_vis/spatial_fltr"
+    save_root = "./phase_prop_vis/spatial_fltr_no_pinhole"
     os.makedirs(save_root, exist_ok=True)
     lamb0 = Prop.lamb0 # list
     ### visualize function

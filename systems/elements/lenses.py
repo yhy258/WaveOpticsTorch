@@ -24,7 +24,6 @@ class MultConvergingLens(nn.Module):
         self.epsilon = epsilon
         
         
-    
     def forward(self, field: Tensor):
         """
         Args:
@@ -106,8 +105,8 @@ def circular_pupil(grid, d): # d is the diameter
     mask = l2norm_grid <= (d/2)**2
     return mask
     
-def square_pupil(field, w): # w : width
-    mask = torch.max(torch.abs(field), dim=0) <= w/2
+def square_pupil(grid, w): # w : width
+    mask = torch.max(torch.abs(grid), dim=0).values <= w/2
     return mask
 
 def multiplicative_phase_lens(field, grid, lamb0, ref_idx, f, NA=None, epsilon=np.finfo(np.float32).eps):
@@ -119,7 +118,7 @@ def multiplicative_phase_lens(field, grid, lamb0, ref_idx, f, NA=None, epsilon=n
     # f is the focal length
     k = 2 * np.pi * ref_idx / lamb0[None, :, None, None] # 1, C, 1, 1
     # grid : Tensor (2, H, W)
-    multiplicative_phase = k / (2*f + epsilon) * (torch.sum(grid ** 2, dim=0, keepdim=True).unsqueeze(0)) # B, C, H, W
+    multiplicative_phase = k / (2*f + epsilon) * (torch.sum(grid ** 2, dim=0, keepdim=True).unsqueeze(0)) # 1, C, H, W
     
     multp_filter = torch.exp(1j * multiplicative_phase)
     
