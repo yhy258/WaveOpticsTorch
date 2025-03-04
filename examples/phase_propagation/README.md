@@ -16,13 +16,13 @@ $$
 where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$). $^{[1]}$
 
 #### 1. PSFs on Sensor with varying wavelengths
-**Pixel size = 5µm [Beyond the sampling criterion]**
+**Pixel size = 5µm [Beyond the sampling rate limit criterion]**
   
-- Based on the default setting, I set the pixel size as 5µm (this is beyond the sampling criterion)
+- Based on the default setting, I set the pixel size as 5µm (this is beyond the sampling rate limit criterion)
 
 <img src="./figures/pixel5_550wvl.png" width="300"><img src="./figures/pixel5_1050wvl.png" width="300"><img src="./figures/pixel5_1550wvl.png" width="300">
 
-- These results demonstrate strange patterns... This is caused by aliasing error (according to the above sampling rate criterion.)
+- These results demonstrate strange patterns... This is caused by aliasing error.
 
 #### 2. PSFs on Sensor with varying wavelengths
 **Pixel size = 1µm [Approximately equal to the sampling criterion]**
