@@ -13,7 +13,7 @@ $$
 \Delta x \leq {\lambda\over 2 \text{NA}}
 $$
 
-where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$).$^{[1]}$
+where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ is a numerical aperture ($\text{NA} = n\sin \theta$). $^{[1]}$
 
 #### 1. PSFs on Sensor with varying wavelengths
 **Pixel size = 5µm [Beyond the sampling criterion]**
@@ -36,7 +36,7 @@ where $\Delta x$ is the pixel size, $\lambda$ is a wavelength, and $\text{NA}$ i
 $$
 |f_x| \leq {1 \over [(2\Delta u z)^2 + 1]^{1\over 2} \lambda}
 $$
-- The above definition is band-limit of ASM propagator, where $\Delta u = 1/L$ and $L = N \Delta x$.$^{[2]}$
+- The above definition is band-limit of ASM propagator, where $\Delta u = 1/L$ and $L = N \Delta x$. $^{[2]}$
 
 - Therefore, it is important to find the balance among the parameters regarding to the given bounds.
 
