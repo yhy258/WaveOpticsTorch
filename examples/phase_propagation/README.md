@@ -5,6 +5,22 @@
 
 Basically, this optical system is based on 4f-system.
 
+The default configuration of the optical system follows as :
+
+```python
+Prop = SpatialFilteredPSF(
+        pixel_size=[1, 1],
+        pixel_num=[1000, 1000],
+        lamb0=[0.55, 1.05, 1.550],
+        refractive_index=1,
+        paraxial=True,
+        focal_length=19*1e3,
+        NA=0.3,
+        nyquist_spatial_bound=True
+)
+```
+
+
 ## Experiments
 
 ### Spatial Sampling Rate
