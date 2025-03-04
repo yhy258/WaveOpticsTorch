@@ -113,8 +113,8 @@ def asm_propagator(input_field, z, n: float, lamb0: Tensor, dx: float, dy: float
         width_x = f_limit_px - f_limit_nx
         width_y = f_limit_py - f_limit_ny
         
-        H_filter_x = torch.abs(fx).unsqueeze(0) <= width_x[:, None, None]
-        H_filter_y = torch.abs(fy).unsqueeze(0) <= width_y[:, None, None]
+        H_filter_x = torch.abs(fx).unsqueeze(0) <= width_x[:, None, None] / 2
+        H_filter_y = torch.abs(fy).unsqueeze(0) <= width_y[:, None, None] / 2
         H_filter = H_filter_x * H_filter_y # C, H, W
         
         propagator = propagator * H_filter
