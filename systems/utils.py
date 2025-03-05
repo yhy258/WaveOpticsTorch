@@ -57,7 +57,7 @@ def pol2cart(rho, theta):
     y = rho * torch.sin(theta)
     return x, y
 
-def set_spatial_grid(H, W, dx, dy):
+def set_spatial_grid(H: int, W: int, dx: float, dy: float) -> Tensor:
     grid_x, grid_y = np.meshgrid(
         np.linspace(0, (H-1), H) - H / 2,
         np.linspace(0, (W-1), W) - W / 2, indexing='ij'
@@ -66,7 +66,7 @@ def set_spatial_grid(H, W, dx, dy):
     grid.requires_grad_(False) 
     return grid # Tensor (2, H, W)
 
-def set_freq_grid(H, W, dx, dy):
+def set_freq_grid(H: int, W: int, dx: float, dy: float) -> Tensor:
     fx, fy = np.meshgrid(
         np.fft.fftshift(np.fft.fftfreq(H, dx)), 
         np.fft.fftshift(np.fft.fftfreq(W, dy)), indexing='ij'
@@ -74,6 +74,33 @@ def set_freq_grid(H, W, dx, dy):
     f_grid = torch.stack((torch.from_numpy(fx), torch.from_numpy(fy)), dim=0)
     f_grid.requires_grad_(False) 
     return f_grid
+
+
+# simple case
+def fresnel_integral_criterion(grid: Tensor, lamb: Tensor, z: float) -> bool:
+    """
+    The criterion whether Fresnel approximation is valid for the given parameters.
+    Args:
+        grid (Tensor; 2, H, W): Spatial Grid
+        lamb (Tensor; C, ): lamb0/refractive_index
+        z (float): Propagation distance
+        
+    If the entire region of the input field is fully covered by the significant contribution region of Fresnel integral,
+    then we can say it is valid.
+    
+    Chapter 4 in the book, Introduction to Fourier Optics by Joseph W. Goodman
+    """
+    
+    x0, x1 = torch.min(grid[0]), torch.max(grid[0])
+    y0, y1 = torch.min(grid[1]), torch.max(grid[1])
+    
+    x_flag_mask = torch.abs(x0-x1).unsqueeze(9) <= 2*torch.sqrt(lamb * z)[:, None, None] # C, H, W
+    y_flag_mask = torch.abs(y0-y1).unsqueeze(9) <= 2*torch.sqrt(lamb * z)[:, None, None]
+    
+    x_flag = torch.allclose(x_flag_mask, torch.ones_like(x_flag_mask, dtype=torch.bool))
+    y_flag = torch.allclose(y_flag_mask, torch.ones_like(y_flag_mask, dtype=torch.bool))
+    return x_flag * y_flag 
+    
     
 
 ### MATH
