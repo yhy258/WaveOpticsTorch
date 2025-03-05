@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.functional import Tensor
-from utils import compute_power
+from utils import compute_power, _triple
 
 """
     1. Point source
@@ -77,6 +77,7 @@ class PlaneSource(nn.Module):
 
 def pointsource(grid, amplitude, lamb0, ref_idx, src_loc, z, power=1.0, paraxial=False, epsilon=np.finfo(np.float32).eps):
     # lamb0 : C,
+    
     if paraxial:
         assert src_loc == None or src_loc == 0 or torch.allclose(src_loc, torch.zeros_like(src_loc)), "In paraxial setting, please set the src_loc = 0 or None"
     
@@ -122,15 +123,18 @@ def planesource(grid, amplitude, lamb0, ref_idx, dir_factors, power=1.0):
     
     # dir_factors : 3
     # dir_x, dir_y, dir_z are just float.
-    dir_x, dir_y, dir_z = dir_factors[0], dir_factors[1], dir_factors[2]
-    
-    # MAKE alpha, beta, and gamma, where l2_norm(dir_factors) = 1
-    dir_l2norm = (dir_x**2 + dir_y ** 2+ dir_z ** 2)**(1/2)
-    if dir_l2norm != 0:
-        dir_x, dir_y, dir_z = dir_x/dir_l2norm, dir_y/dir_l2norm, dir_z/dir_l2norm
+    if dir_factors != None:
+        dir_x, dir_y, dir_z = dir_factors[0], dir_factors[1], dir_factors[2]
+        # MAKE alpha, beta, and gamma, where l2_norm(dir_factors) = 1
+        dir_l2norm = (dir_x**2 + dir_y ** 2+ dir_z ** 2)**(1/2)
+        if dir_l2norm != 0:
+            dir_x, dir_y, dir_z = dir_x/dir_l2norm, dir_y/dir_l2norm, dir_z/dir_l2norm
+        else:
+            dir_x, dir_y, dir_z = 0, 0, 1
+
     else:
         dir_x, dir_y, dir_z = 0, 0, 1
-
+    
     # we do not have to consider the z factor because the phase is just relative...
     inner_dist = (dir_x * grid_x[None, None, :, :] + dir_y * grid_y[None, None, :, :])
     
