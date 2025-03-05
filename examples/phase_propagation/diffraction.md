@@ -6,6 +6,7 @@ Verify whether the framework can accurately model the diffraction phenomena for 
 
 ## Opical System
 ![Optical System](./figures/diffraction/opt_setting.png)  
+This system utilizes the planewave.  
 
 The default configuration of the optical system follows as :
 
@@ -21,7 +22,7 @@ Prop = Diffraction(
     pupil_type=pupil_type,
     pupil_width=100,
     nyquist_spatial_bound=False
-)
+) # This system utilizes the planewave.
 ```
 
 ## Check the intermediate outputs of the code.
