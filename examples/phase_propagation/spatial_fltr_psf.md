@@ -1,4 +1,4 @@
-# Spatial Filtered PSF
+# Spatially Filtered PSF
 
 The code is at `spatial_fltr_psf.py` in this directory.
 
