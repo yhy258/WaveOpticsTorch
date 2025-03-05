@@ -1,7 +1,7 @@
-# OpticalEncoder
+# WaveOpticsTorch
 
 
-**OpticalEncoder** is a Python project based on Pytorch framework that allows to place various optical elements (lenses, slits, apertures, etc.) and perform wave optics propagation to simulate phenomena such as diffraction and compute PSF (Point Spread Function) with GPU.
+**WaveOpticsTorch** is a Python project based on Pytorch framework that allows to place various optical elements (lenses, slits, apertures, etc.) and perform wave optics propagation to simulate phenomena such as diffraction and compute PSF (Point Spread Function) with GPU.
 
 ## TODO List
 
