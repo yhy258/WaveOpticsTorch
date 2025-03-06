@@ -5,7 +5,8 @@
 
 ## TODO List
 
-- [X] Verificaiton of utilization of GPU devices, and Parallelization  
+- [X] Verificaiton of utilization of GPU devices
+- [ ] Parallelization  
 - [ ] Scalable ASM (SAS)  
 - [ ] Various phase initialization methods.  
 - [ ] Considering magnification.  
