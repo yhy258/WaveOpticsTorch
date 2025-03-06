@@ -5,13 +5,14 @@
 
 ## TODO List
 
-[ ] Verificaiton of utilization of GPU devices, and Parallelization  
-[ ] Scalable ASM (SAS)  
-[ ] Various phase initialization methods.  
-[ ] Considering magnification.  
-[ ] Considering shifted locations of sources or fields.  
-[ ] Considering various directions of the input fields.  
-[ ] More various examples.  
+- [X] Verificaiton of utilization of GPU devices, and Parallelization  
+- [ ] Scalable ASM (SAS)  
+- [ ] Various phase initialization methods.  
+- [ ] Considering magnification.  
+- [ ] Considering shifted locations of sources or fields.  
+- [ ] Considering various directions of the input fields.  
+- [ ] More various examples.  
 
 ## Examples
 1. Spatially filtered PSF using the pinhole.
+2. Analyzing the diffraction pattern from the circle and square apertures.
