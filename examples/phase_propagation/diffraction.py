@@ -4,13 +4,13 @@ import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 )
-from functools import partial
-import numpy as np
 import torch
 import systems.elements as elem
-from systems.systems import OpticalSystem
+from systems.systems import OpticalSystem, Field
 from systems.utils import _pair
 import matplotlib.pyplot as plt
+import time
+
 
 
 def nyquist_pixelsize_criterion(NA, lamb):
@@ -51,31 +51,30 @@ class Diffraction(OpticalSystem):
             self.init_grid_params()
         
         self.source = elem.PlaneSource(
-            grid=self.grid,
             amplitude=1.0,
-            lamb0=self.lamb0,
             ref_idx=self.refractive_index,
             dir_factors=None, # center.
             power=1.0,
         )
         
         
-        self.pupil_mask = elem.circular_pupil(self.grid, pupil_width) if pupil_type == 'circle' else elem.square_pupil(self.grid, pupil_width,)
+        pupil_mask = elem.circular_pupil(self.x_grid, self.y_grid, pupil_width) if pupil_type == 'circle' else elem.square_pupil(self.x_grid, self.y_grid, pupil_width,)
+        self.register_buffer('pupil_mask', pupil_mask)
+        
         
         self.prop = elem.ASMPropagation(
             z=focal_length,
-            lamb0=self.lamb0,
             ref_idx=self.refractive_index,
-            dx=self.pixel_size[0],
-            dy=self.pixel_size[1],
             band_limited=True
         )
         
         self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
     
     def forward(self):
-        unpowered_src_field, src_field = self.source()
-        H, W = src_field.shape[-2:]
+        
+        field = Field(lamb0=self.lamb0, x_grid=self.x_grid, y_grid=self.y_grid, fx_grid=self.fx_grid, fy_grid=self.fy_grid)
+        
+        src_field = self.source(field)
         print(f"Initial Field's shape: {src_field.shape}")
         pupiled_field = self.pupil_mask * src_field
         print(f"Field's shape after {self.pupil_type} pupil: {pupiled_field.shape}")    
@@ -85,7 +84,7 @@ class Diffraction(OpticalSystem):
         print(f"Field's shape after propagation: {prop_field.shape}")
         out = self.sensor(prop_field)
         print(f"Output Field's shape : {out.shape}")
-        return src_field, pupiled_field, prop_field, out
+        return src_field.field, pupiled_field.field, prop_field.field, out
     
     
 # 다양한 Propagation distance, Wavelengths, Pixelsize, NA에 대해 ㄱㄱ?
@@ -109,14 +108,15 @@ def make_kwargs(lamb0, diameter, pupil_type):
     )
     return this_kwargs
     
-def iterative_perform_(kwargss: list):
+def iterative_perform_(kwargss: list, device):
     outs = {}
     for kwargs in kwargss:
-        Prop = Diffraction(**kwargs)
+        Prop = Diffraction(**kwargs).to(device)
         src_field, pupiled_field, prop_field, out = Prop()
         #### Visualization code.
         #### Out field instantly save in list.
         #### Show the figures in grid!
+        out = out.detach().cpu()
         diameter = kwargs['pupil_width']
         lamb0 = kwargs['lamb0']
         pt = kwargs['pupil_type']
@@ -124,7 +124,7 @@ def iterative_perform_(kwargss: list):
         outs[dict_key] = out
     return outs
 
-def iterative_perform(save_root, file_name):
+def iterative_perform(save_root, file_name, device):
     lamb0s = [0.4, 0.55, 0.7]
     diameters = [50, 100, 200]
     kwargss = []
@@ -133,7 +133,7 @@ def iterative_perform(save_root, file_name):
         for lamb0 in lamb0s:
             for diameter in diameters:
                 kwargss.append(make_kwargs(lamb0, diameter, pt))
-        out_dict = iterative_perform_(kwargss)
+        out_dict = iterative_perform_(kwargss, device)
         ### Visualization with varying out_dict[f"NA{NA}_lamb0{lamb0}"]
         ### Make Fig grid
         fig, axes = plt.subplots(nrows=len(lamb0s), ncols=len(diameters))
@@ -151,13 +151,15 @@ def iterative_perform(save_root, file_name):
 
 
 if __name__ == "__main__":
-    
+    device = 'cuda:7'
     
     base_save_root = "./phase_prop_vis/diffraction"
     os.makedirs(base_save_root, exist_ok=True)
     
     ### visualize function
     def visualize(file_name, field, title, mode='phase'):
+        if field.device != 'cpu':
+            field = field.detach().cpu()
         if mode == "abs":
             plt.imshow(torch.abs(field))    
         elif mode == "phase" or mode == 'angle':
@@ -168,25 +170,29 @@ if __name__ == "__main__":
         plt.colorbar()
         plt.savefig(os.path.join(save_root, file_name))
         plt.clf()
-    
     for pupil_type in ['square', 'circle']:
-        save_root = os.path.join(base_save_root, pupil_type)
-        os.makedirs(save_root, exist_ok=True)
-        Prop = Diffraction(
-                pixel_size=[0.6, 0.6],
-                pixel_num=[1000, 1000],
-                lamb0=[0.4, 0.55, 0.7],
-                refractive_index=1,
-                paraxial=False,
-                focal_length=10*1e3,
-                NA=0.3,
-                pupil_type=pupil_type,
-                pupil_width=100,
-                nyquist_spatial_bound=False
-        )
-        src_field, pupiled_field, prop_field, out = Prop()   
-        
-        this_grid = Prop.grid
+        for device in ['cuda:7', 'cpu']:
+            save_root = os.path.join(base_save_root, pupil_type)
+            os.makedirs(save_root, exist_ok=True)
+            Prop = Diffraction(
+                    pixel_size=[0.6, 0.6],
+                    pixel_num=[1000, 1000],
+                    lamb0=[0.4, 0.55, 0.7],
+                    refractive_index=1,
+                    paraxial=False,
+                    focal_length=10*1e3,
+                    NA=0.3,
+                    pupil_type=pupil_type,
+                    pupil_width=100,
+                    nyquist_spatial_bound=False
+            ).to(device)
+            strt = time.time()
+            src_field, pupiled_field, prop_field, out = Prop()   
+            end = time.time()
+            
+            print(f"{device} device : {end-strt} (s)")
+        x_grid, y_grid = Prop.x_grid, Prop.y_grid
+        radial_grid = x_grid ** 2 + y_grid ** 2
         lamb0 = Prop.lamb0 # list
             
         
@@ -213,4 +219,4 @@ if __name__ == "__main__":
         visualize(file_name_format.format(pupil_type, 'sensor', torch.round(lamb0[1]/Prop.nanometers)), out[0, 1], title=title_format.format(pupil_type, "Sensor", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
         visualize(file_name_format.format(pupil_type, 'sensor', torch.round(lamb0[2]/Prop.nanometers)), out[0, 2], title=title_format.format(pupil_type, "Sensor", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
         
-    iterative_perform(base_save_root, 'wvl_pupwidth_grid_fig.png')
+    iterative_perform(base_save_root, 'wvl_pupwidth_grid_fig.png', device=device)

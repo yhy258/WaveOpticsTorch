@@ -8,24 +8,17 @@
         INT_OUTPUT is detected on sensor.
 """
 
-
-
-
-import os, sys, math, datetime, glob, faulthandler
+import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 )
+import warnings
+
 import math
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.functional import Tensor
-
-from functools import partial
-
-import systems.elements as elem
-from utils import set_spatial_grid, set_freq_grid, _list
+from utils import set_spatial_grid, set_freq_grid, _list, compute_power, compute_intensity
 
 ############################## INTEGRATED OPTICAL SYSTEM.
 class OpticalSystem(nn.Module):
@@ -54,23 +47,32 @@ class OpticalSystem(nn.Module):
         self.poisson_m = poisson_m
         self.gaussian_std = gaussian_std
         
-        self.lamb0 = torch.tensor(lamb0)
+        lamb0 = torch.tensor(lamb0)
+        lamb = lamb0/refractive_index
         self.refractive_index = refractive_index
-        self.lamb = self.lamb0/self.refractive_index
         
         self.Lx = pixel_size[0] * pixel_num[0]
         self.Ly = pixel_size[1] * pixel_num[1]
         
-        self.grid = self.set_grid()
-        self.f_grid = self.set_fgrid()
+        x_grid, y_grid = self.set_grid()
+        fx_grid, fy_grid = self.set_fgrid()
+        
+        self.register_buffer('lamb0', lamb0)
+        self.register_buffer('lamb', lamb)
+        self.register_buffer('x_grid', x_grid)
+        self.register_buffer('y_grid', y_grid)
+        self.register_buffer('fx_grid', fx_grid)
+        self.register_buffer('fy_grid', fy_grid)
+        
+        
     
     def init_grid_params(self):
         
         self.Lx = self.pixel_size[0] * self.pixel_num[0]
         self.Ly = self.pixel_size[1] * self.pixel_num[1]
         
-        self.grid = self.set_grid()
-        self.f_grid = self.set_fgrid()
+        self.x_grid, self.y_grid = self.set_grid()
+        self.fx_grid, self.fy_grid = self.set_fgrid()
     
     def set_grid(self):
         ## center : 0
@@ -114,9 +116,280 @@ class OpticalSystem(nn.Module):
         self.pixel_size = [dx, dy]
         self.Lx, self.Ly = Lx, Ly
         
-        self.grid = self.set_grid()
-        self.f_grid = self.set_fgrid()
+        self.x_grid, self.y_grid = self.set_grid()
+        self.fx_grid, self.fy_grid = self.set_fgrid()
         #### Setting self.grid and self.f_grid as Source's grid and f_grid
         #### After applying several scalable ASM, then the functions would outcome each output's grid.
         
+
+
+"""
+    This instance is inspired by https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/field.py
+    In order to allocate the torch.tensor data to gpu devices, it is better to use these tensors which will be
+    allocated to devices in forward process instead of the initialization process.
+    Comprehensively, there are four tensors that are allocated to gpu devices.
+    1. field
+    2. wavelengths
+    3. spatial domain grid (x_grid, y_grid)
+    4. frequency domain grid (fx_grid, fy_grid)
+"""
+
+class Field:
+    def __init__(self, field=None, lamb0=None, x_grid=None, y_grid=None, fx_grid=None, fy_grid=None, device="cpu"):
+        """
+        Args:
+            field (torch.Tensor): (1, C, H, W).
+            lamb0 (torch.Tensor): Wavelength in free space (C)
+            x_grid, y_grid (torch.Tensor): Spatial domain grid (H, 1), (1, W).
+            fx_grid, fy_grid (torch.Tensor): Frequency domain grid (H, 1), (1, W)..
+            device (str or torch.device): 
+        """
+        for name, tensor in [("field", field), ("lamb0", lamb0), ("x_grid", x_grid), 
+                             ("y_grid", y_grid), ("fx_grid", fx_grid), ("fy_grid", fy_grid)]:
+            if tensor is not None and not isinstance(tensor, torch.Tensor):
+                raise TypeError(f"{name} must be a torch.Tensor, got {type(tensor)}")
         
+        self.field = field
+        self.lamb0 = lamb0
+        
+        """
+        We set the grid parameters as the low-rank form to mitigate the use of larger memory.
+        Sometimes, in-place operation is not desirable since it can influence computational graphs.
+        Keeping this in mind, I try to minimize the allocation of memory caused by non-in-place operations
+        by setting the grid parameters as the low-rank form.
+        """
+        self.x_grid = x_grid
+        self.y_grid = y_grid
+        self.fx_grid = fx_grid
+        self.fy_grid = fy_grid
+
+    def to(self, device):
+        device = torch.device(device)
+        self.field = self.field.to(device) if self.field is not None else None
+        self.lamb0 = self.lamb0.to(device) if self.lamb0 is not None else None
+        self.x_grid = self.x_grid.to(device) if self.x_grid is not None else None
+        self.y_grid = self.y_grid.to(device) if self.y_grid is not None else None
+        self.fx_grid = self.fx_grid.to(device) if self.fx_grid is not None else None
+        self.fy_grid = self.fy_grid.to(device) if self.fy_grid is not None else None
+        return self
+
+    def replace_field(self, field):
+        return Field(
+            field=field,
+            lamb0=self.lamb0,
+            x_grid=self.x_grid,
+            y_grid=self.y_grid,
+            fx_grid=self.fx_grid,
+            fy_grid=self.fy_grid,
+            device=self.device
+        )
+
+
+    def unsqueeze(self, dim):
+        """New field instance"""
+        return self.replace_field(self.field.unsqueeze(dim))
+
+    def __abs__(self):
+        """새로운 Field 인스턴스를 생성 (non-in-place)."""
+        return self.replace_field(torch.abs(self.field)) 
+    
+    def abs(self):
+        return self.__abs__()
+
+    def __add__(self, b):
+        """새로운 Field 인스턴스를 생성하여 반환 (non-in-place)."""
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform addition")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform addition")
+            new_field = self.field + b.field
+        else:
+            new_field = self.field + b
+        return self.replace_field(new_field)
+    
+    def __radd__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform addition")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform addition")
+            new_field = b.field.to(self.device) + self.field
+        else:
+            new_field = b + self.field
+        return self.replace_field(new_field)
+
+    def __iadd__(self, b):
+        """In-place Addition Warning when tracking gradient"""
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform in-place addition")
+        if self.field.requires_grad:
+            warnings.warn("In-place operation on a tensor with requires_grad=True may break the computational graph. Consider using non-in-place operation (+).")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform in-place addition")
+            self.field = self.field + b.field
+        else:
+            self.field = self.field + b
+        return self
+
+    def __mul__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform multiplication")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform multiplication")
+            new_field = self.field * b.field
+        else:
+            new_field = self.field * b
+        return self.replace_field(new_field)
+    
+    def __rmul__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform multiplication")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform multiplication")
+            new_field = b.field.to(self.device) * self.field
+        else:
+            new_field = b * self.field
+        return self.replace_field(new_field)
+
+    def __imul__(self, b):
+        """In-place Multiplication. Warning when tracking gradient"""
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform in-place multiplication")
+        if self.field.requires_grad:
+            warnings.warn("In-place operation on a tensor with requires_grad=True may break the computational graph. Consider using non-in-place operation (*).")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform in-place multiplication")
+            self.field = self.field * b.field
+        else:
+            self.field = self.field * b
+        return self
+
+    def __truediv__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform division")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform division")
+            new_field = self.field / b.field
+        else:
+            new_field = self.field / b
+        return self.replace_field(new_field)
+    
+    def __rtruediv__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform division")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform division")
+            new_field = b.field.to(self.device) / self.field
+        else:
+            new_field = b / self.field
+        return self.replace_field(new_field)
+
+
+    def __itruediv__(self, b):
+        """In-place Divide. Warning when tracking gradient"""
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform in-place division")
+        if self.field.requires_grad:
+            warnings.warn("In-place operation on a tensor with requires_grad=True may break the computational graph. Consider using non-in-place operation (/).")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform in-place division")
+            self.field = self.field / b.field
+        else:
+            self.field = self.field / b
+        return self
+
+    def __sub__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform subtraction")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform subtraction")
+            new_field = self.field - b.field
+        else:
+            new_field = self.field - b
+        return self.replace_field(new_field)
+    
+    def __rsub__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform subtraction")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform subtraction")
+            new_field = b.field.to(self.device) - self.field
+        else:
+            new_field = b - self.field
+        return self.replace_field(new_field)
+
+    def __isub__(self, b):
+        if self.field is None:
+            raise ValueError("self.field is None, cannot perform in-place subtraction")
+        if self.field.requires_grad:
+            warnings.warn("In-place operation on a tensor with requires_grad=True may break the computational graph. Consider using non-in-place operation (-).")
+        if isinstance(b, Field):
+            if b.field is None:
+                raise ValueError("b.field is None, cannot perform in-place subtraction")
+            self.field = self.field - b.field
+        else:
+            self.field = self.field - b
+        return self
+
+    @property
+    def device(self):
+        return self.field.device if self.field is not None else None
+
+    @property
+    def shape(self):
+        return self.field.shape if self.field is not None else None
+
+    @property
+    def dx(self):
+        return abs(self.x_grid[1, 0] - self.x_grid[0, 0]) if self.x_grid is not None else None
+
+    @property
+    def dy(self):
+        return abs(self.y_grid[0, 1] - self.y_grid[0, 0]) if self.y_grid is not None else None
+    
+    @property
+    def Lx(self):
+        return self.dx * self.field[-2]
+
+    @property
+    def Ly(self):
+        return self.dy * self.field[-1]
+
+    @property
+    def dfx(self):
+        return abs(self.fx_grid[1, 0] - self.fx_grid[0, 0]) if self.fx_grid is not None else None
+
+    @property
+    def dfy(self):
+        return abs(self.fy_grid[0, 1] - self.fy_grid[0, 0]) if self.fy_grid is not None else None
+
+    @property
+    def pixel_area(self):
+        return self.dx * self.dy if self.dx is not None and self.dy is not None else None
+
+    @property
+    def freq_pixel_area(self):
+        return self.dfx * self.dfy if self.dfx is not None and self.dfy is not None else None
+
+    @property
+    def intensity(self):
+        return compute_intensity(self.field, sum=True) if self.field is not None else None
+
+    @property
+    def ch_intensity(self):
+        return compute_intensity(self.field, sum=False) if self.field is not None else None
+
+    @property
+    def power(self):
+        return compute_power(self.field, self.pixel_area) if self.field is not None and self.pixel_area is not None else None
+    

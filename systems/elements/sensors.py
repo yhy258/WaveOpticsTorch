@@ -2,11 +2,9 @@ import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 )
-import numpy as np
 import torch
 import torch.nn as nn
-from torch.functional import Tensor
-from utils import compute_intensity
+from systems.systems import Field
 
 
 
@@ -22,9 +20,11 @@ class Sensor(nn.Module):
         
 
 
-def sensor(field, shot_noise_modes, clip, channel_sum=True):
-    
-    intensity = compute_intensity(field, sum=channel_sum)
+def sensor(field: Field, shot_noise_modes: list, clip: list, channel_sum: bool = True):
+    if channel_sum:
+        intensity = field.intensity
+    else:
+        intensity = field.ch_intensity
     
     if isinstance(shot_noise_modes, str):
         shot_noise_modes = list(shot_noise_modes)
@@ -33,10 +33,10 @@ def sensor(field, shot_noise_modes, clip, channel_sum=True):
         if sn == "gaussian":
             intensity = gaussian_noise(intensity)
         elif sn == "poisson":
-            field = torch.clamp(field, clip[0], 100.)
+            # intensity = torch.clamp(intensity, clip[0], 100.)
             intensity = poisson_noise(intensity)
         elif sn == "approximated_poisson":
-            field = torch.clamp(field, clip[0], 100.)
+            # intensity = torch.clamp(intensity, clip[0], 100.)
             intensity = approximated_poisson_noise(intensity)
     
     return torch.clamp(intensity, clip[0], clip[1])

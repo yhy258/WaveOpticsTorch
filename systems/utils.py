@@ -57,23 +57,17 @@ def pol2cart(rho, theta):
     y = rho * torch.sin(theta)
     return x, y
 
-def set_spatial_grid(H: int, W: int, dx: float, dy: float) -> Tensor:
-    grid_x, grid_y = np.meshgrid(
-        np.linspace(0, (H-1), H) - H / 2,
-        np.linspace(0, (W-1), W) - W / 2, indexing='ij'
-    )
-    grid = torch.stack((torch.from_numpy(grid_x)*dx, torch.from_numpy(grid_y)*dy), dim=0)
-    grid.requires_grad_(False) 
-    return grid # Tensor (2, H, W)
+def set_spatial_grid(H: int, W: int, dx: float, dy: float) -> tuple:
+    x_grid, y_grid = np.linspace(0, (H-1), H) - H / 2, np.linspace(0, (W-1), W) - W / 2
+    x_grid, y_grid = torch.from_numpy(x_grid)*dx, torch.from_numpy(y_grid)*dy
+    x_grid.requires_grad_(False), y_grid.requires_grad_(False) 
+    return x_grid.unsqueeze(1), y_grid.unsqueeze(0) # Tensor H, 1 and 1, W
 
-def set_freq_grid(H: int, W: int, dx: float, dy: float) -> Tensor:
-    fx, fy = np.meshgrid(
-        np.fft.fftshift(np.fft.fftfreq(H, dx)), 
-        np.fft.fftshift(np.fft.fftfreq(W, dy)), indexing='ij'
-    )
-    f_grid = torch.stack((torch.from_numpy(fx), torch.from_numpy(fy)), dim=0)
-    f_grid.requires_grad_(False) 
-    return f_grid
+def set_freq_grid(H: int, W: int, dx: float, dy: float) -> tuple:
+    
+    fx_grid, fy_grid = torch.fft.fftshift(torch.fft.fftfreq(H, dx)), torch.fft.fftshift(torch.fft.fftfreq(W, dy))
+    fx_grid.requires_grad_(False), fy_grid.requires_grad_(False) 
+    return fx_grid.unsqueeze(1), fy_grid.unsqueeze(0) # Tensor H, 1 and 1, W
 
 
 # simple case
@@ -155,7 +149,9 @@ def filter_IEEE_error(psf, otf):
     return otf
 
 def double_padnd(x, n=2):
+    
     xsize = x.size()[::-1][:n]
+    
     fftsize = [xsz*2 - 1 for xsz in xsize]
     padsize = ()
     for fsz, xsz in zip(fftsize, xsize):
@@ -299,32 +295,30 @@ def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
 def shifted_fft(x, spatial_dims=(-2, -1)):
     fft = partial(torch.fft.fft2, dim=spatial_dims)
     ifftshift = partial(torch.fft.ifftshift, dim=spatial_dims)
-    fftshift = partial(torch.fft.fftshift, dim=spatial_dims)
-    return fftshift(fft(ifftshift(x)))
+    fftshift = partial(torch.fft.fftshift, dim=spatial_dims) 
 
+    if isinstance(x, Tensor):
+        return fftshift(fft(ifftshift(x))) # maybe error occur
+        
+    else:
+        x.field = fftshift(fft(ifftshift(x.field)))
+        return x
 
-def optical_fft(field, grid, f_grid, lamb0, z, ref_idx):
+def optical_fft(field, z, ref_idx):
     """
     Args:
-        field (Tensor, B, C, H, W): Input field of this system.
-        grid (Tensor, 2, H, W): Spatial grid
-        f_grid (Tensor, 2, H, W): Frequency grid
-        lamb0 (Tensor, C,): WAvelengths
+        field (Field; ): Including grid, f_grid, lamb0 (Spatial grid, Frequency grid, wavelength)
         z (float): Propagation distance
         ref_idx (Int): Refractive Index
         
         # but only consider forward propagation.
     """
 
-    L_sq = lamb0[None, :, None, None] * z / ref_idx # 1, C, 1, 1
+    L_sq = field.lamb0[None, :, None, None] * z / ref_idx # 1, C, 1, 1
     
-    dx = torch.abs(grid[0, 1, 0] - grid[0, 0, 0])
-    dk = torch.abs(f_grid[0, 1, 0] - f_grid[0, 0, 0])
-    du = dk * L_sq
+    norm_fft = -1j * field.pixel_area / L_sq # B, C, 1, 1
     
-    norm_fft = -1j * dx * dx / L_sq # B, C, 1, 1
-    
-    fft_input = norm_fft * field # B, C, H, W
+    fft_input = field * norm_fft # B, C, H, W
     
     spatial_dims = (-2, -1)
     
