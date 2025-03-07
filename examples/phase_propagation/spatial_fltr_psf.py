@@ -64,7 +64,7 @@ class SpatialFilteredPSF(OpticalSystem):
         )
         
         
-        self.pinhole = elem.CirclePupil(self.x_grid, y_grid, pinhole_width)
+        self.pinhole = elem.CirclePupil(self.x_grid, self.y_grid, pinhole_width)
         
         self.fflens = elem.FFLens(
             ref_idx=self.refractive_index,
