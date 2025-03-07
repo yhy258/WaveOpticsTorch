@@ -77,18 +77,18 @@ The first figure is the intensity.  The second figure is the normalized intensit
 Specifically, the f_num[] in the title of each figure denotes the F-number.
 
 1. **Fix the propagation distance and change the pupil's width.**
-<img src="./figures/diffraction/circle_abs_varwidth_fnum_fig.gif" width="400"><img src="./figures/diffraction/circle_int_varwidth_fnum_fig.gif" width="400">
+<img src="./figures/diffraction/circle_abs_varwidth_fnum_fig.gif" width="350"><img src="./figures/diffraction/circle_int_varwidth_fnum_fig.gif" width="350">
 
     
 
 2. **Fix the pupil's width and change the propagation width.**
-<img src="./figures/diffraction/circle_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/circle_int_varz_fnum_fig.gif" width="400">
+<img src="./figures/diffraction/circle_abs_varz_fnum_fig.gif" width="350"><img src="./figures/diffraction/circle_int_varz_fnum_fig.gif" width="350">
 
 #### F-number and Square Aperture
 
 1. **Fix the propagation distance and change the pupil's width.**
-<img src="./figures/diffraction/square_abs_varwidth_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varwidth_fnum_fig.gif" width="400">
+<img src="./figures/diffraction/square_abs_varwidth_fnum_fig.gif" width="350"><img src="./figures/diffraction/square_int_varwidth_fnum_fig.gif" width="350">
 
 
 2. **Fix the pupil's width and change the propagation width.**
-<img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="400">
+<img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="350"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="350">
