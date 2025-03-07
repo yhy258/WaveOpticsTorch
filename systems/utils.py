@@ -424,15 +424,3 @@ def _ntuple(n):
 _triple = _ntuple(3)
 _pair = _ntuple(2)
 _single = _ntuple(1)
-
-# #%%
-# import numpy as np
-
-# x1 = np.linspace(1, 5, 5)
-# y1 = np.linspace(6, 10, 5)
-
-# x2, y2 = np.meshgrid(x1, y1, indexing='ij')
-# print(x1, y1)
-# # %%
-# x2, y2
-# %%

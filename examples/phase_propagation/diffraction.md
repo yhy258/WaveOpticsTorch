@@ -32,7 +32,7 @@ Prop = Diffraction(
 4. Detected intensity on the sensor.
 
 ### Circle Aperture
-1. Field before applying the pupil function of the given aperture. - This is just constant because we set the source as normally incident plane wave.
+1. Field before applying the pupil function of the given aperture. - This is just constant because we set the source as a normal incident plane wave.
 2. Field after applying pupil function  
 <img src="./figures/diffraction/400wvl_after_circ.png" width="300"><img src="./figures/diffraction/550wvl_after_circ.png" width="300"><img src="./figures/diffraction/700wvl_after_circ.png" width="300">
 
@@ -41,8 +41,8 @@ Prop = Diffraction(
 
 
 ### Square Aperture
-1. Field before applying pupil function of the given aperture. - This is just constant because we set the source as normally incident plane wave.
-2. Field after applying pupil function  
+1. Field before applying the pupil function of the given aperture. - This is just constant because we set the source as a normal incident plane wave.
+2. Field after applying pupil function   
 <img src="./figures/diffraction/400wvl_after_sqr.png" width="300"><img src="./figures/diffraction/550wvl_after_sqr.png" width="300"><img src="./figures/diffraction/700wvl_after_sqr.png" width="300">
 
 3. Field after applying ASM (distance z = 10µm)  
@@ -60,4 +60,35 @@ Prop = Diffraction(
 
 - As pupil width increases, the main lobe size decreases.
 - As wavelength increases, the main lobe size increases.
-- If the pupil width is too large, the diffraction pattern is split. - This has to be checked theoretically.
+- **If the pupil width is too large, the diffraction pattern is split.**
+
+
+### F-number and Diffraction Pattern.
+According to $^{[1]}$, as Fresnel number (F-number, $N_F$) increases, the diffraction pattern becomes sharp.  
+
+I visualize this phoenomena.  
+1. I set the F-number range as [0.1, 10.] with the 0.1 interval.
+2. I visualize the results for both circle and rectangle pupils.
+
+#### F-number and Circle Aperture
+
+The first figure is the intensity.  The second figure is the normalized intensity for the horizontal axis at the center.
+
+Specifically, the f_num[] in the title of each figure denotes the F-number.
+
+1. **Fix the propagation distance and change the pupil's width.**
+<img src="./figures/diffraction/circle_abs_varwidth_fnum_fig.gif" width="400"><img src="./figures/diffraction/circle_int_varwidth_fnum_fig.gif" width="400">
+
+    
+
+2. **Fix the pupil's width and change the propagation width.**
+<img src="./figures/diffraction/circle_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/circle_int_varz_fnum_fig.gif" width="400">
+
+#### F-number and Square Aperture
+
+1. **Fix the propagation distance and change the pupil's width.**
+<img src="./figures/diffraction/square_abs_varwidth_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varwidth_fnum_fig.gif" width="400">
+
+
+2. **Fix the pupil's width and change the propagation width.**
+<img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="400">

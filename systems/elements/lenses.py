@@ -86,6 +86,38 @@ class ThinLens(nn.Module):
         )
         
 
+class CirclePupil(nn.Module):
+    def __init__(self, x_grid: Tensor, y_grid: Tensor, width: float):
+        super(CirclePupil, self).__init__()
+        """
+        Args:
+            x_grid (Tensor; H, 1): 
+            y_grid (Tensor; 1, W): 
+            width (float):
+        """
+        mask = circular_pupil(x_grid, y_grid, width)
+        self.mask = nn.Parameter(mask, requires_grad=False)
+    
+    def forward(self, field):
+        # field.shape : 1, C, H, W
+        return field * self.mask[None, None]
+        
+class SquarePupil(nn.Module):
+    def __init__(self, x_grid: Tensor, y_grid: Tensor, width: float):
+        super(SquarePupil, self).__init__()
+        """
+        Args:
+            x_grid (Tensor; H, 1): 
+            y_grid (Tensor; 1, W): 
+            width (float):
+        """
+        mask = square_pupil(x_grid, y_grid, width)
+        self.mask = nn.Parameter(mask, requires_grad=False)
+    
+    def forward(self, field):
+        # field.shape : 1, C, H, W
+        return field * self.mask[None, None]
+
 ## pupil functions (based on https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/pupils.py#L7)
 ### in small size, circular pupil would not be circularly symmetric
 def circular_pupil(x_grid, y_grid, d): # d is the diameter

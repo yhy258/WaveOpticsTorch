@@ -1,21 +1,37 @@
 # Considering direction of the field
-
 import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 )
+import math
+from functools import partial
+import numpy as np
 import torch
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
 from systems.utils import _pair
 import matplotlib.pyplot as plt
 import time
-
-
+import matplotlib.animation as animation
+from matplotlib.animation import FuncAnimation
 
 def nyquist_pixelsize_criterion(NA, lamb):
     max_pixel_size = lamb/(2*NA) # C, Tensor
     return torch.min(max_pixel_size).item() # bound..
+
+
+def f_number(area: float, lamb: float, z: float):
+    return area / (lamb* z)
+
+def get_width(f_num, lamb, z, pt='circle'):
+    area = f_num * lamb * z
+    if pt == 'circle':
+        return math.sqrt(area/math.pi) * 2
+    else:
+        return math.sqrt(area)
+
+def get_z(f_num, area, lamb):
+    return area / (f_num * lamb)
     
 
 class Diffraction(OpticalSystem):
@@ -39,6 +55,7 @@ class Diffraction(OpticalSystem):
             refractive_index=refractive_index
         )
         self.pupil_type = pupil_type
+        self.focal_length = focal_length
         
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
@@ -58,9 +75,7 @@ class Diffraction(OpticalSystem):
         )
         
         
-        pupil_mask = elem.circular_pupil(self.x_grid, self.y_grid, pupil_width) if pupil_type == 'circle' else elem.square_pupil(self.x_grid, self.y_grid, pupil_width,)
-        self.register_buffer('pupil_mask', pupil_mask)
-        
+        self.pupil_mask = elem.CirclePupil(self.x_grid, self.y_grid, pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
         
         self.prop = elem.ASMPropagation(
             z=focal_length,
@@ -76,7 +91,7 @@ class Diffraction(OpticalSystem):
         
         src_field = self.source(field)
         print(f"Initial Field's shape: {src_field.shape}")
-        pupiled_field = self.pupil_mask * src_field
+        pupiled_field = self.pupil_mask(src_field)
         print(f"Field's shape after {self.pupil_type} pupil: {pupiled_field.shape}")    
         prop_field = self.prop(pupiled_field) # asm
         if isinstance(prop_field, list) or isinstance(prop_field, tuple): # SASPropagation.
@@ -93,14 +108,14 @@ class Diffraction(OpticalSystem):
 # NA : 0.1, 0.3, 0.5
 # Pixel size : Nyquist spatial bound x
 
-def make_kwargs(lamb0, diameter, pupil_type):
+def make_kwargs(lamb0, diameter, pupil_type, z=None):
     this_kwargs = dict(
         pixel_size=[0.6, 0.6],
         pixel_num=[500, 500],
         lamb0=[lamb0],
         refractive_index=1,
         paraxial=False,
-        focal_length=10*1e3,
+        focal_length=10*1e3 if z == None else z,
         NA=0.3,
         pupil_type=pupil_type,
         pupil_width=diameter,
@@ -119,17 +134,25 @@ def iterative_perform_(kwargss: list, device):
         out = out.detach().cpu()
         diameter = kwargs['pupil_width']
         lamb0 = kwargs['lamb0']
+        z = Prop.focal_length
         pt = kwargs['pupil_type']
-        dict_key = f"d{diameter}_lamb0{lamb0[0]}_{pt}pup"
+        if pt == 'circle':
+            area = (diameter / 2) ** 2 * math.pi
+        elif pt == 'square':
+            area = diameter * diameter    
+        
+        f_num = f_number(area, lamb0[0], z)
+        dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0[0]}_{pt}pup"
         outs[dict_key] = out
     return outs
 
 def iterative_perform(save_root, file_name, device):
     lamb0s = [0.4, 0.55, 0.7]
     diameters = [50, 100, 200]
-    kwargss = []
+    
     pupil_types = ['circle', 'square']
     for pt in pupil_types:
+        kwargss = []
         for lamb0 in lamb0s:
             for diameter in diameters:
                 kwargss.append(make_kwargs(lamb0, diameter, pt))
@@ -137,10 +160,15 @@ def iterative_perform(save_root, file_name, device):
         ### Visualization with varying out_dict[f"NA{NA}_lamb0{lamb0}"]
         ### Make Fig grid
         fig, axes = plt.subplots(nrows=len(lamb0s), ncols=len(diameters))
-        
+        z = 10*1e3
         for i, lamb0 in enumerate(lamb0s):
             for j, diameter in enumerate(diameters):
-                dict_key = f"d{diameter}_lamb0{lamb0}_{pt}pup"
+                if pt == 'circle':
+                    area = (diameter / 2) ** 2 * math.pi
+                elif pt == 'square':
+                    area = diameter * diameter    
+                f_num = f_number(area=area, lamb=lamb0, z=z)
+                dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0}_{pt}pup"
                 out = out_dict[dict_key]
                 axes[i,j].imshow(torch.abs(out)[0,0])
                 axes[i,j].title.set_text("_".join(dict_key.split("_")[:2])) 
@@ -148,8 +176,97 @@ def iterative_perform(save_root, file_name, device):
         plt.tight_layout()
         fig.savefig(os.path.join(save_root, f"{pt}_"+file_name))
         plt.clf()
+        
+### GIF Visualization function    
+def animate(i, dict_data, keys, mode='abs'):
+    this_key = keys[i]
+    out = dict_data[this_key]
+    plt.cla()
+    
+    if mode == 'abs':
+        plt.imshow(torch.abs(out)[0, 0])
+        
+    elif mode =='1d_intensity':
+        out = out[0, 0]
+        H, W = out.shape
+        out = out[H//2, :]
+        x = np.linspace(-W//2, W//2, W, endpoint=True, dtype=np.int16)
+        out_max = torch.abs(out.max())
+        plt.plot(x, out/out_max)
+    
+    plt.title("_".join(this_key.split("_")[:4]))
+    plt.tight_layout()        
 
 
+
+def f_num_iterative_perform(save_root, file_name, device):
+    lamb0 = 0.55
+    f_num_range = np.arange(0.1, 10.1, 0.1, dtype=np.float32)
+    fixed_diameter = 100
+    fixed_z = 10*1e3
+    pupil_types = ['circle', 'square']    
+    
+    writer = animation.PillowWriter(fps=30)
+    for pt in pupil_types:    
+        kwargss = []
+        # keys = []
+        for f_num in f_num_range:
+            #### fixed z
+            f_num = round(f_num, 1)
+            # print("This f_num: ", f_num)
+            width = get_width(f_num, lamb=lamb0, z=fixed_z, pt=pt)
+            kwargss.append(make_kwargs(lamb0, width, pt))
+            # dict_key = f"fnum{round(f_num, 1)}_z{round(fixed_z, 1)}_d{round(width, 1)}_lamb0{lamb0}_{pt}pup"
+            # keys.append(dict_key)
+
+        var_w_out_dict = iterative_perform_(kwargss, device)
+        this_file_name = "{}_{}_{}_" + file_name
+        
+        # print(keys)
+        abs_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='abs')
+        int1d_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='1d_intensity')
+        
+        fig = plt.figure()
+        ani = FuncAnimation(plt.gcf(), abs_this_animate, frames=len(kwargss), interval=100)
+        ani.save(os.path.join(save_root, this_file_name.format(pt, 'abs', 'varwidth')), writer=writer)
+        plt.close(fig)
+        
+        fig = plt.figure()
+        ani = FuncAnimation(plt.gcf(), int1d_this_animate, frames=len(kwargss), interval=100)
+        ani.save(os.path.join(save_root, this_file_name.format(pt, 'int', 'varwidth')), writer=writer)
+        plt.close(fig)
+        
+        kwargss = []
+        ### Video Visualization
+        for f_num in f_num_range: 
+            f_num = round(f_num, 1)
+            if pt == 'circle':
+                area = (fixed_diameter / 2) ** 2 * math.pi
+            elif pt == 'square':
+                area = fixed_diameter * fixed_diameter   
+            z = get_z(f_num, area=area, lamb=lamb0)
+            kwargss.append(make_kwargs(lamb0, fixed_diameter, pt, z))
+            # dict_key = f"fnum{round(f_num, 1)}_z{round(z, 1)}_d{round(fixed_diameter, 1)}_lamb0{lamb0}_{pt}pup"
+            # keys.append(dict_key)
+
+        var_z_out_dict = iterative_perform_(kwargss, device)
+
+        ### Video Visualization
+
+        abs_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='abs')
+        int1d_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='1d_intensity')
+        
+        fig = plt.figure()
+        ani = FuncAnimation(plt.gcf(), abs_this_animate, frames=len(kwargss), interval=100)
+        ani.save(os.path.join(save_root, this_file_name.format(pt, 'abs', 'varz')), writer=writer)
+        plt.close(fig)
+        
+        fig = plt.figure()
+        ani = FuncAnimation(plt.gcf(), int1d_this_animate, frames=len(kwargss), interval=100)
+        ani.save(os.path.join(save_root, this_file_name.format(pt, 'int', 'varz')), writer=writer)
+        plt.close(fig)
+        
+        
 if __name__ == "__main__":
     device = 'cuda:7'
     
@@ -219,4 +336,6 @@ if __name__ == "__main__":
         visualize(file_name_format.format(pupil_type, 'sensor', torch.round(lamb0[1]/Prop.nanometers)), out[0, 1], title=title_format.format(pupil_type, "Sensor", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
         visualize(file_name_format.format(pupil_type, 'sensor', torch.round(lamb0[2]/Prop.nanometers)), out[0, 2], title=title_format.format(pupil_type, "Sensor", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
         
-    iterative_perform(base_save_root, 'wvl_pupwidth_grid_fig.png', device=device)
+    iterative_perform(base_save_root, 'wvl_pupwidth_grid_fig.png', device=device) 
+    
+    f_num_iterative_perform(base_save_root, 'fnum_fig.gif', device=device)

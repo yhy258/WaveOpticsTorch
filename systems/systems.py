@@ -162,6 +162,8 @@ class Field:
         self.y_grid = y_grid
         self.fx_grid = fx_grid
         self.fy_grid = fy_grid
+        
+        self.phase_applied = False 
 
     def to(self, device):
         device = torch.device(device)

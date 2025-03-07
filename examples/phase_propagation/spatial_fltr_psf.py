@@ -63,7 +63,8 @@ class SpatialFilteredPSF(OpticalSystem):
             band_limited=True
         )
         
-        self.register_buffer("pinhole", elem.circular_pupil(self.x_grid, self.y_grid, pinhole_width))
+        
+        self.pinhole = elem.CirclePupil(self.x_grid, y_grid, pinhole_width)
         
         self.fflens = elem.FFLens(
             ref_idx=self.refractive_index,
@@ -85,7 +86,7 @@ class SpatialFilteredPSF(OpticalSystem):
         if isinstance(prop_field, list) or isinstance(prop_field, tuple): # SASPropagation.
             prop_field, pixel_size = prop_field
         print(f"Field's shape after propagation: {prop_field.shape}")
-        pinhole_field = prop_field * self.pinhole[None, None, :, :]
+        pinhole_field = self.pinhole(prop_field)
         print(f"Field's shape after pinhole: {pinhole_field.shape}") # spatial filtering
         ff_field = self.fflens(pinhole_field)
         print(f"FF lens Field's shape : {ff_field.shape}")
