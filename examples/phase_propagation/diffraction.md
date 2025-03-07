@@ -96,3 +96,6 @@ Specifically, the f_num[] in the title of each figure denotes the F-number.
 2. **Fix the pupil's width and change the propagation width.**
 
 <img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="400">
+
+
+[1] JW Goodman - 2005 - Introduction to Fourier Optics
