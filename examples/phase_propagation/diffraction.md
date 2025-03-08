@@ -4,7 +4,7 @@ The code is at `diffraction.py` in this directory.
 ## Goal
 Verify whether the framework can accurately model the diffraction phenomena for various parameters (e.g. wavelengths, pupil widths, and pupil types.)  
 
-## Opical System
+## Optical System
 ![Optical System](./figures/diffraction/opt_setting.png)  
 This system utilizes the planewave.  
 
@@ -66,6 +66,11 @@ Prop = Diffraction(
 ### F-number and Diffraction Pattern.
 According to $^{[1]}$, as Fresnel number (F-number, $N_F$) increases, the diffraction pattern becomes sharp.  
 
+$$
+N_F = {r^2 \over \lambda z}
+$$, where r is the characteristic size of the aperture (e.g. radius or the half of width.) $^{[2]}$
+
+
 I visualize this phoenomena.  
 1. I set the F-number range as [0.1, 10.] with the 0.1 interval.
 2. I visualize the results for both circle and rectangle pupils.
@@ -122,3 +127,4 @@ Below is the comparison between my framework's diffraction patterns and the anal
 **These results show that WaveOpticsTorch highly aligns with the analytic solution.**
 
 [1] JW Goodman - 2005 - Introduction to Fourier Optics
+[2] https://en.wikipedia.org/wiki/Fresnel_number
