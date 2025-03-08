@@ -54,7 +54,7 @@ class Diffraction(OpticalSystem):
         
         self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
 ```  
-    - The elem's components are defined by inherited from nn.Module. We can use these optical elements in Pytorch-friendly way.
+    - The elem's components are defined by inherited from nn.Module. We can use these optical elements in a Pytorch-friendly way.
     - OpticalSystem class is also inherited by nn.Module.  
 
 
