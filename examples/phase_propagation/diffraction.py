@@ -58,7 +58,6 @@ class Diffraction(OpticalSystem):
         pixel_num=[1000, 1000],
         lamb0=[0.55, 1.05, 1.550],
         refractive_index=1,
-        paraxial=False,
         focal_length=19*1e3,
         NA=0.3,
         pupil_type='circle',
@@ -90,8 +89,6 @@ class Diffraction(OpticalSystem):
             dir_factors=None, # center.
             power=1.0,
         )
-        
-        
         self.pupil_mask = elem.CirclePupil(self.x_grid, self.y_grid, pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
         
         self.prop = elem.ASMPropagation(
@@ -131,7 +128,6 @@ def make_kwargs(lamb0, diameter, pupil_type, z=None):
         pixel_num=[500, 500],
         lamb0=[lamb0],
         refractive_index=1,
-        paraxial=False,
         focal_length=10*1e3 if z == None else z,
         NA=0.3,
         pupil_type=pupil_type,
@@ -347,7 +343,6 @@ if __name__ == "__main__":
                     pixel_num=[1000, 1000],
                     lamb0=[0.4, 0.55, 0.7],
                     refractive_index=1,
-                    paraxial=False,
                     focal_length=10*1e3,
                     NA=0.3,
                     pupil_type=pupil_type,
