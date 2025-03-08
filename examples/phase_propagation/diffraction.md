@@ -66,9 +66,7 @@ Prop = Diffraction(
 ### F-number and Diffraction Pattern.
 According to $^{[1]}$, as Fresnel number (F-number, $N_F$) increases, the diffraction pattern becomes sharp.  
 
-$$
-N_F = {r^2 \over \lambda z}
-$$, where r is the characteristic size of the aperture (e.g. radius or the half of width.) $^{[2]}$
+$$N_F = {r^2 \over \lambda z}$$, where r is the characteristic size of the aperture (e.g. radius or the half of width.) $^{[2]}$
 
 
 I visualize this phoenomena.  
