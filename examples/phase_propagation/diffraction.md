@@ -82,7 +82,7 @@ Specifically, the f_num[] in the title of each figure denotes the F-number.
 
     
 
-2. **Fix the pupil's width and change the propagation width.**
+2. **Fix the pupil's width and change the propagation distance.**
 
 <img src="./figures/diffraction/circle_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/circle_int_varz_fnum_fig.gif" width="400">
 
@@ -93,12 +93,30 @@ Specifically, the f_num[] in the title of each figure denotes the F-number.
 <img src="./figures/diffraction/square_abs_varwidth_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varwidth_fnum_fig.gif" width="400">
 
 
-2. **Fix the pupil's width and change the propagation width.**
+2. **Fix the pupil's width and change the propagation distance.**
 
 <img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="400">
 
 
 - When I change the pupil's width, the diffraction pattern converges. This is because the diameter of the aperture extends the grid.
 
+
+## Verification by comparing with the analytic solution of the square aperture's diffraction pattern.
+
+There exists the analytic solution of the square aperture's diffraction pattern. $^{[1]}$  
+This is expressed with Fresnel integral terms.  
+The below is the results of the comparison between my framework's diffraction patterns and the analytic solutions.  
+
+1. **Fix the propagation distance and change the pupil's width.**  
+
+<img src="./figures/diffraction/fresnelcompare_square_abs_varwidth_fnum_fig.gif" width="600">  
+<img src="./figures/diffraction/fresnelcompare_square_int_varwidth_fnum_fig.gif" width="600">
+  
+2. **Fix the pupil's width and change the propagation distance.**  
+
+<img src="./figures/diffraction/fresnelcompare_square_abs_varz_fnum_fig.gif" width="600">  
+<img src="./figures/diffraction/fresnelcompare_square_int_varz_fnum_fig.gif" width="600">
+
+**These results show that WaveOpticsTorch highly aligns with the analytic solution.**
 
 [1] JW Goodman - 2005 - Introduction to Fourier Optics

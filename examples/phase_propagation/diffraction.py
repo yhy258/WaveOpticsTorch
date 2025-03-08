@@ -7,6 +7,7 @@ import math
 from functools import partial
 import numpy as np
 import torch
+from torch.functional import Tensor
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
 from systems.utils import _pair
@@ -14,6 +15,7 @@ import matplotlib.pyplot as plt
 import time
 import matplotlib.animation as animation
 from matplotlib.animation import FuncAnimation
+from scipy.special import fresnel
 
 def nyquist_pixelsize_criterion(NA, lamb):
     max_pixel_size = lamb/(2*NA) # C, Tensor
@@ -28,6 +30,26 @@ def get_width(f_num, lamb, z):
 
 def get_z(f_num, width, lamb):
     return (width/2)**2 / (lamb * f_num)
+
+def fresnel_diffraction_square_aperture(width: float, x_grid: Tensor, y_grid: Tensor, lamb: float, z: float):
+    h_width = width/2
+    if len(x_grid.shape)> 1:
+        x_grid = x_grid.squeeze()
+        y_grid = y_grid.squeeze()
+    coef = (2/(lamb*z))**(1/2)
+    alpha1s, alpha2s = -coef*(h_width + x_grid), coef*(h_width - x_grid)
+    beta1s, beta2s = -coef*(h_width + y_grid), coef*(h_width - y_grid)
+    aC1, aS1 = fresnel(alpha1s.detach().tolist())
+    aC2, aS2 = fresnel(alpha2s.detach().tolist())
+    bC1, bS1 = fresnel(beta1s.detach().tolist())
+    bC2, bS2 = fresnel(beta2s.detach().tolist())
+    aC1, aS1, aC2, aS2, bC1, bS1, bC2, bS2 = map(torch.tensor, [aC1, aS1, aC2, aS2, bC1, bS1, bC2, bS2])
+    unsq0 = partial(torch.unsqueeze, dim=0)
+    unsq1 = partial(torch.unsqueeze, dim=1)
+    aC1, aS1, aC2, aS2 = map(unsq1, [aC1, aS1, aC2, aS2])
+    bC1, bS1, bC2, bS2 = map(unsq0, [bC1, bS1, bC2, bS2])
+    I = 1/4*((aC2-aC1)**2+(aS2-aS1)**2) * ((bC2-bC1)**2+(bS2-bS1)**2)
+    return I
 
 class Diffraction(OpticalSystem):
     def __init__(
@@ -118,8 +140,9 @@ def make_kwargs(lamb0, diameter, pupil_type, z=None):
     )
     return this_kwargs
     
-def iterative_perform_(kwargss: list, device):
+def iterative_perform_(kwargss: list, device, sqr_fresnel_case=False):
     outs = {}
+    sqr_fresnel = {}
     for kwargs in kwargss:
         Prop = Diffraction(**kwargs).to(device)
         src_field, pupiled_field, prop_field, out = Prop()
@@ -135,6 +158,13 @@ def iterative_perform_(kwargss: list, device):
         f_num = f_number(diameter, lamb0[0], z)
         dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0[0]}_{pt}pup"
         outs[dict_key] = out
+        
+        
+        if sqr_fresnel_case:
+            fresnel_out = fresnel_diffraction_square_aperture(width=diameter, x_grid=Prop.x_grid, y_grid=Prop.y_grid, lamb=lamb0[0], z=z)
+            sqr_fresnel[dict_key] = fresnel_out
+    if sqr_fresnel_case:
+        return outs, sqr_fresnel
     return outs
 
 def iterative_perform(save_root, file_name, device):
@@ -184,17 +214,52 @@ def animate(i, dict_data, keys, mode='abs'):
     plt.title("_".join(this_key.split("_")[:4]))
     plt.tight_layout()        
 
-
+def fresnel_compare_animate(i, dict_data, fresnel_dict_data, keys, mode='abs'):
+    this_key = keys[i]
+    out = dict_data[this_key]
+    fresnel_out = fresnel_dict_data[this_key]
+    plt.clf()
+    
+    if mode == 'abs':
+        plt.subplot(121)
+        plt.imshow(torch.abs(out)[0, 0])
+        plt.title("_".join(this_key.split("_")[:3]))
+        
+        plt.subplot(122)
+        plt.imshow(torch.abs(fresnel_out))
+        plt.title("_".join(this_key.split("_")[:3]) + "_Fresnel")
+     
+        plt.tight_layout()
+    
+    elif mode =='1d_intensity':
+        out = out[0, 0]
+        H, W = out.shape
+        FH, FW = fresnel_out.shape
+        out = out[H//2, :]
+        out_max = torch.abs(out.max())
+        fresnel_out = fresnel_out[FH//2, :]      
+        fresnel_out_max = torch.abs(fresnel_out.max())
+        x = np.linspace(-W//2, W//2, W, endpoint=True, dtype=np.int16)
+        plt.subplot(121)
+        plt.plot(x, out/out_max)
+        plt.title("_".join(this_key.split("_")[:3]))
+        
+        plt.subplot(122)
+        plt.plot(x, fresnel_out/fresnel_out_max)
+        plt.title("_".join(this_key.split("_")[:3]) + "_Fresnel")
+        
+        plt.tight_layout()
+    
 
 def f_num_iterative_perform(save_root, file_name, device):
     lamb0 = 0.55
     f_num_range = np.arange(0.1, 10.1, 0.1, dtype=np.float32)
     fixed_diameter = 100
     fixed_z = 10*1e3
-    pupil_types = ['circle', 'square']    
-    
+    pupil_types = ['square']    
+    this_file_name = "{}_{}_{}_" + file_name
     writer = animation.PillowWriter(fps=30)
-    for pt in pupil_types:    
+    for pt in pupil_types:   
         kwargss = []
         # keys = []
         for f_num in f_num_range:
@@ -205,14 +270,15 @@ def f_num_iterative_perform(save_root, file_name, device):
             kwargss.append(make_kwargs(lamb0, width, pt))
             # dict_key = f"fnum{round(f_num, 1)}_z{round(fixed_z, 1)}_d{round(width, 1)}_lamb0{lamb0}_{pt}pup"
             # keys.append(dict_key)
-
-        var_w_out_dict = iterative_perform_(kwargss, device)
-        this_file_name = "{}_{}_{}_" + file_name
-        
-        # print(keys)
-        abs_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='abs')
-        int1d_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='1d_intensity')
-        
+        if pt == 'square':
+            var_w_out_dict, var_w_fresnel = iterative_perform_(kwargss, device, True)
+            abs_this_animate = partial(fresnel_compare_animate, dict_data=var_w_out_dict, fresnel_dict_data=var_w_fresnel, keys=list(var_w_out_dict.keys()), mode='abs')
+            int1d_this_animate = partial(fresnel_compare_animate, dict_data=var_w_out_dict, fresnel_dict_data=var_w_fresnel, keys=list(var_w_out_dict.keys()), mode='1d_intensity')
+        else:
+            var_w_out_dict = iterative_perform_(kwargss, device, False)
+            abs_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='abs')
+            int1d_this_animate = partial(animate, dict_data=var_w_out_dict, keys=list(var_w_out_dict.keys()), mode='1d_intensity')
+            
         fig = plt.figure()
         ani = FuncAnimation(plt.gcf(), abs_this_animate, frames=len(kwargss), interval=100)
         ani.save(os.path.join(save_root, this_file_name.format(pt, 'abs', 'varwidth')), writer=writer)
@@ -231,13 +297,15 @@ def f_num_iterative_perform(save_root, file_name, device):
             kwargss.append(make_kwargs(lamb0, fixed_diameter, pt, z))
             # dict_key = f"fnum{round(f_num, 1)}_z{round(z, 1)}_d{round(fixed_diameter, 1)}_lamb0{lamb0}_{pt}pup"
             # keys.append(dict_key)
-
-        var_z_out_dict = iterative_perform_(kwargss, device)
-
+        if pt == 'square':
+            var_z_out_dict, var_z_fresnel = iterative_perform_(kwargss, device, True)
+            abs_this_animate = partial(fresnel_compare_animate, dict_data=var_z_out_dict, fresnel_dict_data=var_z_fresnel, keys=list(var_z_out_dict.keys()), mode='abs')
+            int1d_this_animate = partial(fresnel_compare_animate, dict_data=var_z_out_dict, fresnel_dict_data=var_z_fresnel, keys=list(var_z_out_dict.keys()), mode='1d_intensity')
+        else:
+            var_z_out_dict = iterative_perform_(kwargss, device, False)
+            abs_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='abs')
+            int1d_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='1d_intensity')
         ### Video Visualization
-
-        abs_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='abs')
-        int1d_this_animate = partial(animate, dict_data=var_z_out_dict, keys=list(var_z_out_dict.keys()), mode='1d_intensity')
         
         fig = plt.figure()
         ani = FuncAnimation(plt.gcf(), abs_this_animate, frames=len(kwargss), interval=100)
