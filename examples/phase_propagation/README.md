@@ -8,4 +8,7 @@
 <img src="./figures/diffraction/opt_setting.png" width="500">  
 
 2. [**Diffraction with the circle and square pupils**](./diffraction.md)  
-  Code: [`diffraction.py`](./diffraction.py)
+  Code: [`diffraction.py`](./diffraction.py)  
+
+3. [**Sinusoidal Amplitude Image : Talbot Image**](./sin_amp_talbot.md)  
+  Code: [`sin_amp_talbot.py`](./sin_amp_talbot.py)
