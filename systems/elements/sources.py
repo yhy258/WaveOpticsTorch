@@ -83,7 +83,7 @@ def pointsource(field, amplitude, ref_idx, src_loc, z, power=1.0, paraxial=False
         x, y = 0, 0
     else:
         x, y = src_loc[0], src_loc[1] # floats
-        
+    print(x, y)
     k = 2 * np.pi * ref_idx / field.lamb0[:, None, None] # C, 1, 1
     if paraxial:
         phase_distance = 1/(2*z + epsilon)*radial_grid

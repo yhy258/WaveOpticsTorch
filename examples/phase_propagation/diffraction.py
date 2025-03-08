@@ -20,19 +20,14 @@ def nyquist_pixelsize_criterion(NA, lamb):
     return torch.min(max_pixel_size).item() # bound..
 
 
-def f_number(area: float, lamb: float, z: float):
-    return area / (lamb* z)
+def f_number(width: float, lamb: float, z: float):
+    return (width/2)**2 / (lamb* z)
 
-def get_width(f_num, lamb, z, pt='circle'):
-    area = f_num * lamb * z
-    if pt == 'circle':
-        return math.sqrt(area/math.pi) * 2
-    else:
-        return math.sqrt(area)
+def get_width(f_num, lamb, z):
+    return math.sqrt(f_num*lamb*z) * 2
 
-def get_z(f_num, area, lamb):
-    return area / (f_num * lamb)
-    
+def get_z(f_num, width, lamb):
+    return (width/2)**2 / (lamb * f_num)
 
 class Diffraction(OpticalSystem):
     def __init__(
@@ -136,12 +131,8 @@ def iterative_perform_(kwargss: list, device):
         lamb0 = kwargs['lamb0']
         z = Prop.focal_length
         pt = kwargs['pupil_type']
-        if pt == 'circle':
-            area = (diameter / 2) ** 2 * math.pi
-        elif pt == 'square':
-            area = diameter * diameter    
-        
-        f_num = f_number(area, lamb0[0], z)
+            
+        f_num = f_number(diameter, lamb0[0], z)
         dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0[0]}_{pt}pup"
         outs[dict_key] = out
     return outs
@@ -163,11 +154,7 @@ def iterative_perform(save_root, file_name, device):
         z = 10*1e3
         for i, lamb0 in enumerate(lamb0s):
             for j, diameter in enumerate(diameters):
-                if pt == 'circle':
-                    area = (diameter / 2) ** 2 * math.pi
-                elif pt == 'square':
-                    area = diameter * diameter    
-                f_num = f_number(area=area, lamb=lamb0, z=z)
+                f_num = f_number(width=diameter, lamb=lamb0, z=z)
                 dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0}_{pt}pup"
                 out = out_dict[dict_key]
                 axes[i,j].imshow(torch.abs(out)[0,0])
@@ -214,7 +201,7 @@ def f_num_iterative_perform(save_root, file_name, device):
             #### fixed z
             f_num = round(f_num, 1)
             # print("This f_num: ", f_num)
-            width = get_width(f_num, lamb=lamb0, z=fixed_z, pt=pt)
+            width = get_width(f_num, lamb=lamb0, z=fixed_z)
             kwargss.append(make_kwargs(lamb0, width, pt))
             # dict_key = f"fnum{round(f_num, 1)}_z{round(fixed_z, 1)}_d{round(width, 1)}_lamb0{lamb0}_{pt}pup"
             # keys.append(dict_key)
@@ -239,12 +226,8 @@ def f_num_iterative_perform(save_root, file_name, device):
         kwargss = []
         ### Video Visualization
         for f_num in f_num_range: 
-            f_num = round(f_num, 1)
-            if pt == 'circle':
-                area = (fixed_diameter / 2) ** 2 * math.pi
-            elif pt == 'square':
-                area = fixed_diameter * fixed_diameter   
-            z = get_z(f_num, area=area, lamb=lamb0)
+            f_num = round(f_num, 1) 
+            z = get_z(f_num, width=fixed_diameter, lamb=lamb0)
             kwargss.append(make_kwargs(lamb0, fixed_diameter, pt, z))
             # dict_key = f"fnum{round(f_num, 1)}_z{round(z, 1)}_d{round(fixed_diameter, 1)}_lamb0{lamb0}_{pt}pup"
             # keys.append(dict_key)
