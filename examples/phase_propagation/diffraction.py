@@ -58,7 +58,7 @@ class Diffraction(OpticalSystem):
         pixel_num=[1000, 1000],
         lamb0=[0.55, 1.05, 1.550],
         refractive_index=1,
-        focal_length=19*1e3,
+        z=19*1e3,
         NA=0.3,
         pupil_type='circle',
         pupil_width=20,
@@ -71,7 +71,7 @@ class Diffraction(OpticalSystem):
             refractive_index=refractive_index
         )
         self.pupil_type = pupil_type
-        self.focal_length = focal_length
+        self.z = z
         
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
@@ -92,7 +92,7 @@ class Diffraction(OpticalSystem):
         self.pupil_mask = elem.CirclePupil(self.x_grid, self.y_grid, pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
         
         self.prop = elem.ASMPropagation(
-            z=focal_length,
+            z=z,
             ref_idx=self.refractive_index,
             band_limited=True
         )
@@ -128,7 +128,7 @@ def make_kwargs(lamb0, diameter, pupil_type, z=None):
         pixel_num=[500, 500],
         lamb0=[lamb0],
         refractive_index=1,
-        focal_length=10*1e3 if z == None else z,
+        z=10*1e3 if z == None else z,
         NA=0.3,
         pupil_type=pupil_type,
         pupil_width=diameter,
@@ -148,7 +148,7 @@ def iterative_perform_(kwargss: list, device, sqr_fresnel_case=False):
         out = out.detach().cpu()
         diameter = kwargs['pupil_width']
         lamb0 = kwargs['lamb0']
-        z = Prop.focal_length
+        z = Prop.z
         pt = kwargs['pupil_type']
             
         f_num = f_number(diameter, lamb0[0], z)
@@ -343,7 +343,7 @@ if __name__ == "__main__":
                     pixel_num=[1000, 1000],
                     lamb0=[0.4, 0.55, 0.7],
                     refractive_index=1,
-                    focal_length=10*1e3,
+                    z=10*1e3,
                     NA=0.3,
                     pupil_type=pupil_type,
                     pupil_width=100,
