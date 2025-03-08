@@ -105,7 +105,7 @@ Specifically, the f_num[] in the title of each figure denotes the F-number.
 
 There exists the analytic solution of the square aperture's diffraction pattern. $^{[1]}$  
 This is expressed with Fresnel integral terms.  
-Below is the results of the comparison between my framework's diffraction patterns and the analytic solutions.  
+Below is the comparison between my framework's diffraction patterns and the analytic solutions.  
 
 *The left figure of the below results is the simulated diffraction pattern using this code, and the right figure is the analytic solution.*  
 
