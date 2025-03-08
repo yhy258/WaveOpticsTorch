@@ -98,4 +98,7 @@ Specifically, the f_num[] in the title of each figure denotes the F-number.
 <img src="./figures/diffraction/square_abs_varz_fnum_fig.gif" width="400"><img src="./figures/diffraction/square_int_varz_fnum_fig.gif" width="400">
 
 
+- When I change the pupil's width, the diffraction pattern converges. This is because the diameter of the aperture extends the grid.
+
+
 [1] JW Goodman - 2005 - Introduction to Fourier Optics
