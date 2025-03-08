@@ -6,14 +6,10 @@ Verify whether the framework can accurately model the talbot images for various 
 
 ## Talbot Images?
 According to $^{[1]}$, when the below pupil function is given as the sinuoidal amplitude function, then the diffraction pattern becomes different with the various propagation distances.  
-$$
-t_A(x, y) = {1\over 2}[1 + m \cos (2\pi y)/L]
-$$
+$$t_A(x, y) = {1\over 2}[1 + m \cos (2\pi y)/L]$$
 
 The diffraction result of this pupil function is :
-$$
-I(x, y) = {1\over 4}[1 + 2m\cos({\pi \lambda z\over L^2})\cos({2\pi y\over L}) + m^2\cos^2({2\pi y\over L})]
-$$
+$$I(x, y) = {1\over 4}[1 + 2m\cos({\pi \lambda z\over L^2})\cos({2\pi y\over L}) + m^2\cos^2({2\pi y\over L})]$$
 
 1. If ${\pi \lambda z} / L^2 = 2n\pi$, then $I(x,y) = {1\over4}[1 + m\cos (2\pi y/L)]^2$.
 
