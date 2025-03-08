@@ -72,6 +72,7 @@ def forward(self):
 ```  
 
     - You have to first define the Field instance. In the Field instance, the internal components (e.g. field tensor and grid tensor) are updated during performing the given operations.  
+    - The field is initially updated from the defined source!  
 
 
 
