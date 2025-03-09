@@ -2,7 +2,7 @@ import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 )
-
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -10,25 +10,13 @@ from systems.systems import Field
 from torch.functional import Tensor
 from utils import padded_fftnd, unpadded_ifftnd, shifted_fft, double_padnd, double_unpadnd, set_spatial_grid, set_freq_grid
 
-
-"""
-    1. Padding the field to alleviate the circular convolution problem.
-    2. Define the f-grid using the padded field.
-"""
 class ASMPropagation(nn.Module):
-    """
-    GPU 할당해도 좀 느리다. 이유 -> ASMPropagation 실행할때 grid 를 update함. 이게 시간을 많이 먹는듯하다.
-    Propagation을 여러번 사용한다는 가정하에, grid를 내부에서 재 정의하는건 어떨까.
-    """ 
-    
     def __init__(self, z, ref_idx, band_limited=True):
         super(ASMPropagation, self).__init__()
         self.z = z
         self.ref_idx = ref_idx
         self.band_limited = band_limited
     
-        
-        
     def forward(self, field):
         field.field = double_padnd(field.field, n=2)
         propagator, fx, fy, dfx, dfy = asm_propagator(field, self.z, self.ref_idx) # C, H, W
@@ -36,7 +24,7 @@ class ASMPropagation(nn.Module):
         if self.band_limited:
             propagator = asm_bandlimit(propagator, field.lamb0/self.ref_idx, fx, fy, dfx, dfy, self.z).unsqueeze(0)
         else:
-            propagator = self.propagator.unsqueeze(0)
+            propagator = propagator.unsqueeze(0)
         
         assert field.field.shape == propagator.shape, f"The input field's shape and the propagator's shape should be same. The input field's shape is {field.shape}, and the propagator's shape is {propagator.shape}"
         return field_propagate(field, propagator, ndim=2)
@@ -79,7 +67,7 @@ def asm_propagator(field: Field, z: float, n: float):
     device = field.device
     H, W = field.shape[-2:]
     
-    k = 2*np.pi*n / field.lamb0
+    
     lamb = field.lamb0/n
     
     Lx = field.dx * H
@@ -95,14 +83,14 @@ def asm_propagator(field: Field, z: float, n: float):
     
     # lamb : C,
     # fx : H, W
-    fz = torch.sqrt((1/lamb[:, None, None]) ** 2 - (fx.unsqueeze(0)**2 + fy.unsqueeze(0)**2)) # broadcasting 사용.
+    fz = torch.sqrt((1/lamb[:, None, None]) ** 2 - (fx.unsqueeze(0) **2 + fy.unsqueeze(0)**2)) # broadcasting 사용.
     kz = 2 * np.pi * fz
     propagator = torch.exp(1j * kz * z) # C, H, W
     
     ### BL-ASM ; Antialiasing
     ### Local frequency of phase -> bandlimit
     ### Sampling in Fourier domain -> periodicty in Spatial domain..
-    return propagator, fx, fy, dfx, dfy # Inherently, the propagator's DC is at the center of array.
+    return propagator, fx.unsqueeze(0), fy.unsqueeze(0), dfx, dfy # Inherently, the propagator's DC is at the center of array.
 
 def asm_bandlimit(propagator, lamb, fx, fy, dfx, dfy, z):
     f_limit_px = ((2 * dfx * z)**2 + 1) ** (-1/2) / lamb
@@ -114,8 +102,8 @@ def asm_bandlimit(propagator, lamb, fx, fy, dfx, dfy, z):
     width_x = f_limit_px - f_limit_nx
     width_y = f_limit_py - f_limit_ny
     
-    H_filter_x = torch.abs(fx).unsqueeze(0) <= width_x[:, None, None] / 2 # C, H, 1
-    H_filter_y = torch.abs(fy).unsqueeze(0) <= width_y[:, None, None] / 2 # C, 1, W
+    H_filter_x = torch.abs(fx) <= width_x[:, None, None] / 2 # C, H, 1
+    H_filter_y = torch.abs(fy) <= width_y[:, None, None] / 2 # C, 1, W
     H_filter = H_filter_x * H_filter_y # C, H, W
     
     return propagator * H_filter
