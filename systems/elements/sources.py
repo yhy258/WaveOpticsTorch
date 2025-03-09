@@ -12,7 +12,6 @@ from systems.systems import Field
     1. Point source
     2. Plane wave
 """ 
-    
 class PointSource(nn.Module):
     """
         Unlike other classes, Source classes get "grid" and "lamb0" parameters when initializing this instance.

@@ -108,9 +108,9 @@ def make_kwargs(lamb0, NA):
         lamb0=[lamb0],
         refractive_index=1,
         paraxial=False,
-        focal_length=1*1e3,
+        focal_length=19*1e3,
         NA=NA,
-        pinhole_width=100,
+        pinhole_width=10,
         nyquist_spatial_bound=False
     )
     return this_kwargs
@@ -163,8 +163,8 @@ if __name__ == "__main__":
             pixel_num=[1000, 1000],
             lamb0=[0.55, 1.05, 1.550],
             refractive_index=1,
-            paraxial=False,
-            focal_length=10*1e3,
+            paraxial=True,
+            focal_length=19*1e3,
             NA=0.3,
             pinhole_width=20,
             nyquist_spatial_bound=False
@@ -205,6 +205,9 @@ if __name__ == "__main__":
     visualize(file_name_format.format('prop_field', torch.round(lamb0[0]/Prop.nanometers)), prop_field[0, 0], title=title_format.format("prop_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('pinhole_field', torch.round(lamb0[0]/Prop.nanometers)), pinhole_field[0, 0], title=title_format.format("pinhole_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('ff_field', torch.round(lamb0[0]/Prop.nanometers)), ff_field[0, 0], title=title_format.format("ff_field", torch.round(lamb0[0]/Prop.nanometers)), mode='abs')
+    
+    visualize(file_name_format.format('ff_field', torch.round(lamb0[1]/Prop.nanometers)), ff_field[0, 1], title=title_format.format("ff_field", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
+    
     
     visualize(file_name_format.format('multp_field', torch.round(lamb0[2]/Prop.nanometers)), multp_field[0, 2], title=title_format.format("multp_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('prop_field', torch.round(lamb0[2]/Prop.nanometers)), prop_field[0, 2], title=title_format.format("prop_field", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')

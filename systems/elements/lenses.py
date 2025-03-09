@@ -117,6 +117,14 @@ class SquarePupil(nn.Module):
     def forward(self, field):
         # field.shape : 1, C, H, W
         return field * self.mask[None, None]
+    
+class CustomPupil(nn.Module):
+    def __init__(self, pupil: Tensor):
+        super(CustomPupil, self).__init__()
+        self.mask = nn.Parameter(pupil, requires_grad=False)
+    def forward(self, field):
+        return field * self.mask[None, None]
+        
 
 ## pupil functions (based on https://github.com/chromatix-team/chromatix/blob/main/src/chromatix/functional/pupils.py#L7)
 ### in small size, circular pupil would not be circularly symmetric
@@ -147,7 +155,7 @@ def multiplicative_phase_lens(field, ref_idx, f, NA=None, epsilon=np.finfo(np.fl
     
     multiplicative_phase = k / (2*f + epsilon) * radial # 1, C, H, W
     
-    multp_filter = torch.exp(1j * multiplicative_phase)
+    multp_filter = torch.exp(-1j * multiplicative_phase)
     
     if NA is not None:
         D = 2 * f * NA / ref_idx

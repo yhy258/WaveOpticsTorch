@@ -15,6 +15,7 @@ sys.path.insert(
 import warnings
 
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -135,7 +136,15 @@ class OpticalSystem(nn.Module):
 """
 
 class Field:
-    def __init__(self, field=None, lamb0=None, x_grid=None, y_grid=None, fx_grid=None, fy_grid=None, device="cpu"):
+    def __init__(self,
+        field=None,
+        lamb0=None,
+        x_grid=None,
+        y_grid=None,
+        fx_grid=None,
+        fy_grid=None,
+        field_init_path=None ### only consider npy file
+    ):
         """
         Args:
             field (torch.Tensor): (1, C, H, W).
@@ -164,6 +173,18 @@ class Field:
         self.fy_grid = fy_grid
         
         self.phase_applied = False 
+        field_init_flag = False if field_init_path == None else True
+        self.field_init_path = field_init_path
+        if field_init_flag:
+            self.field_init_with_path()
+    
+    def field_init_with_path(self):
+        loaded_field = torch.from_numpy(np.load(self.field_init_path))
+        H, _ = self.x_grid.shape
+        _, W = self.y_grid.shape
+        assert loaded_field.shape[-2] == H and loaded_field.shape[-2] == W, "The shape of loaded field should be same with that of the defined grid."
+        self.field = loaded_field
+        
 
     def to(self, device):
         device = torch.device(device)
@@ -183,7 +204,6 @@ class Field:
             y_grid=self.y_grid,
             fx_grid=self.fx_grid,
             fy_grid=self.fy_grid,
-            device=self.device
         )
 
 
