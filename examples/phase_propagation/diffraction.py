@@ -89,7 +89,7 @@ class Diffraction(OpticalSystem):
             dir_factors=None, # center.
             power=1.0,
         )
-        self.pupil_mask = elem.CirclePupil(self.x_grid, self.y_grid, pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
+        self.pupil_mask = elem.CirclePupil(pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
         
         self.prop = elem.ASMPropagation(
             z=z,

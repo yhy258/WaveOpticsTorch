@@ -22,7 +22,7 @@ class PointSource(nn.Module):
         super(PointSource, self).__init__()
         self.amplitude = amplitude
         self.ref_idx = ref_idx
-        self.z = z
+        self.z = z # int
         self.src_loc = src_loc
         self.power = power
         self.paraxial = paraxial

@@ -3,6 +3,7 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
 )
 import numpy as np
+from functools import partial
 import torch
 import torch.nn as nn
 from torch.functional import Tensor
@@ -87,36 +88,32 @@ class ThinLens(nn.Module):
         
 
 class CirclePupil(nn.Module):
-    def __init__(self, x_grid: Tensor, y_grid: Tensor, width: float):
+    def __init__(self, width: float):
         super(CirclePupil, self).__init__()
         """
         Args:
-            x_grid (Tensor; H, 1): 
-            y_grid (Tensor; 1, W): 
             width (float):
         """
-        mask = circular_pupil(x_grid, y_grid, width)
-        self.mask = nn.Parameter(mask, requires_grad=False)
+        self.circ_pupil = partial(circular_pupil, d=width)
+
     
     def forward(self, field):
         # field.shape : 1, C, H, W
-        return field * self.mask[None, None]
+        mask = self.circ_pupil(x_grid=field.x_grid, y_grid=field.y_grid)
+        return field * mask[None, None]
         
 class SquarePupil(nn.Module):
-    def __init__(self, x_grid: Tensor, y_grid: Tensor, width: float):
+    def __init__(self, width: float):
         super(SquarePupil, self).__init__()
         """
         Args:
-            x_grid (Tensor; H, 1): 
-            y_grid (Tensor; 1, W): 
             width (float):
         """
-        mask = square_pupil(x_grid, y_grid, width)
-        self.mask = nn.Parameter(mask, requires_grad=False)
+        self.sqr_pupil = partial(square_pupil, d=width)
     
     def forward(self, field):
-        # field.shape : 1, C, H, W
-        return field * self.mask[None, None]
+        mask = self.sqr_pupil(x_grid=field.x_grid, y_grid=field.y_grid)
+        return field * mask[None, None]
     
 class CustomPupil(nn.Module):
     def __init__(self, pupil: Tensor):
