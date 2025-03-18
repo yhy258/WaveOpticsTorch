@@ -3,14 +3,25 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 )
 import torch
+import torch.nn.functional as F
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
 from systems.utils import _pair
 
-
 def nyquist_pixelsize_criterion(NA, lamb):
     max_pixel_size = lamb/(2*NA) # C, Tensor
     return torch.min(max_pixel_size).item() # bound..
+
+def global_normalize_abs(field):
+    max_ch = torch.max(field.flatten())
+    min_ch = torch.min(field.flatten())
+    return (field - min_ch) / (max_ch - min_ch)
+
+def normalize_abs(field):
+    # field : H, W, C
+    max_ch = torch.max(torch.max(field, dim=0, keepdim=True).values, dim=1, keepdim=True).values
+    min_ch = torch.min(torch.min(field, dim=0, keepdim=True).values, dim=1, keepdim=True).values
+    return (field - min_ch) / (max_ch - min_ch)
 
 class AberratedImg(OpticalSystem):
     def __init__(
@@ -178,11 +189,15 @@ if __name__ == "__main__":
     os.makedirs(save_root, exist_ok=True)
     lamb0 = Prop.lamb0 # list
     ### visualize function
-    def visualize(file_name, field, title, mode='phase'):
+    def visualize(file_name, field, title, mode='phase', multch_normalize=False):
         if field.device != 'cpu':
             field = field.detach().cpu()
         if mode == "abs":
+            if multch_normalize:
+                # field = normalize_abs(field)
+                field = global_normalize_abs(field)
             plt.imshow(torch.abs(field))    
+            
         elif mode == "phase" or mode == 'angle':
             plt.imshow(torch.angle(field))
         elif mode == "real":
@@ -214,5 +229,6 @@ if __name__ == "__main__":
     visualize(file_name_format.format('sensor', torch.round(lamb0[1]/Prop.nanometers)), out[0, 1], title=title_format.format("Sensor", torch.round(lamb0[1]/Prop.nanometers)), mode='abs')
     visualize(file_name_format.format('sensor', torch.round(lamb0[2]/Prop.nanometers)), out[0, 2], title=title_format.format("Sensor", torch.round(lamb0[2]/Prop.nanometers)), mode='abs')
     
-    visualize(file_name_format.format('sensor', 'Multichannel'), out[0].permute(1, 2, 0)*100, title=title_format.format("Sensor", 'Multichannel'), mode='abs')
+    ##### 적절한 scaling 필요... - Calibration.
+    visualize(file_name_format.format('sensor', 'Multichannel'), out[0].permute(1, 2, 0), title=title_format.format("Sensor", 'Multichannel'), mode='abs', multch_normalize=True)
     
