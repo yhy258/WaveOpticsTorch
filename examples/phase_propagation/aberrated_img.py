@@ -65,14 +65,7 @@ class AberratedImg(OpticalSystem):
             self.pixel_size = pixel_size
             self.init_grid_params()
         
-        # self.source = elem.PointSource(
-        #     amplitude=1.0,
-        #     ref_idx=self.refractive_index,
-        #     z=focal_length,
-        #     src_loc=None, # center.
-        #     power=1.0,
-        #     paraxial=paraxial
-        # )
+        ### Collimated wave from point source. [ASSUMPTION]
         self.source = elem.PlaneSource(
             amplitude=1.0,
             ref_idx=self.refractive_index,
@@ -81,12 +74,10 @@ class AberratedImg(OpticalSystem):
         )
         width = min(pixel_num[0] * pixel_size[0], pixel_num[1] * pixel_size[1])
         self.circle = elem.CirclePupil(width=width)
-        # defocus ; 3 channels
-        ####### Sometimes, the focal length depends on the wavelnegths - chromatic aberration.
-        ####### The focussing error phase mask should get the multi-channel defocus and focal length
+        # 이 circle pupil이 들어간 이유는, digital 상의 grid의 크기가 lens diameter보다 훨씬 작아서 
+        # 이 circle pupil을 취하지 않으면 사각형 형태의 PSF가 나오게됨.
         
         self.hyperboloid = elem.PhaseHyperboloid(pixel_num[0], pixel_num[1], refractive_idx=refractive_index, lamb0=target_lamb0, NA=NA, focal_length=focal_length, init_type='zeros')
-        
         
         self.prop = elem.ASMPropagation(
             z=focal_length,
@@ -104,7 +95,6 @@ class AberratedImg(OpticalSystem):
         src_field = self.circle(src_field)
         print(f"Initial Field's shape: {src_field.shape}")
         multp_field = self.hyperboloid(src_field)
-        # focus_errored_field = self.focus_error(multp_field)
         
         print(f"Field's shape after lens: {multp_field.shape}")    
         prop_field = self.prop(multp_field) # asm
@@ -115,69 +105,12 @@ class AberratedImg(OpticalSystem):
         print(f"Output Field's shape : {out.shape}")
         return src_field.field, multp_field.field, None, prop_field.field, out
     
-    
-# 다양한 Propagation distance, Wavelengths, Pixelsize, NA에 대해 ㄱㄱ?
-# Lambda : 0.4, 0.55, 0.7
-# Propagation distance : z
-# NA : 0.1, 0.3, 0.5
-# Pixel size : Nyquist spatial bound x
-
-def make_kwargs(lamb0, NA):
-    this_kwargs = dict(
-        pixel_size=[0.5, 0.5],
-        pixel_num=[300, 300],
-        lamb0=[lamb0],
-        refractive_index=1,
-        paraxial=False,
-        focal_length=19*1e3,
-        NA=NA,
-        nyquist_spatial_bound=False
-    )
-    return this_kwargs
-    
-def iterative_perform_(kwargss: list, device):
-    outs = {}
-    for kwargs in kwargss:
-        Prop = AberratedImg(**kwargs).to(device)
-        src_field, multp_field, prop_field, pinhole_field, ff_field, out = Prop()
-        #### Visualization code.
-        #### Out field instantly save in list.
-        #### Show the figures in grid!
-        NA = kwargs['NA']
-        lamb0 = kwargs['lamb0']
-        
-        dict_key = f"NA{NA}_lamb0{lamb0[0]}"
-        out = out.detach().cpu()
-        outs[dict_key] = out
-    return outs
-
-def iterative_perform(save_root, file_name, device):
-    lamb0s = [0.4, 0.55, 0.7]
-    NAs = [0.1, 0.3, 0.5]
-    kwargss = []
-    for lamb0 in lamb0s:
-        for NA in NAs:
-            kwargss.append(make_kwargs(lamb0, NA))
-    out_dict = iterative_perform_(kwargss, device)
-    ### Visualization with varying out_dict[f"NA{NA}_lamb0{lamb0}"]
-    ### Make Fig grid
-    fig, axes = plt.subplots(nrows=len(lamb0s), ncols=len(NAs))
-    
-    for i, lamb0 in enumerate(lamb0s):
-        for j, NA in enumerate(NAs):
-            dict_key = f"NA{NA}_lamb0{lamb0}"
-            out = out_dict[dict_key]
-            axes[i,j].imshow(torch.abs(out)[0,0])
-            axes[i,j].title.set_text(dict_key) 
-            
-    plt.tight_layout()
-    fig.savefig(os.path.join(save_root, file_name))
-    plt.clf()
 
 
 if __name__ == "__main__":
     
     device = 'cuda:3'
+    #### This setting is the DRMI paper parameters. (approximated values)
     Prop = AberratedImg(
             pixel_size=[0.5, 0.5],
             pixel_num=[1000, 1000],
