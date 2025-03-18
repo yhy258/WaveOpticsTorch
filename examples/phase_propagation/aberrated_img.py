@@ -1,3 +1,14 @@
+"""
+!!! ISSUE:
+    The simulated polychromatic PSF (independently simulated for several wavelengths) shows different scaling statistics
+    for different wavelengths.
+    -> How can we adjust and alleviate this problem??
+    Green channel has the highest scale, Blue and Red channel have relatively lower scale.
+    In my opinion, this problem may be caused by diffraction / defocusing issue..
+    Is it okay if we use the raw PSF when simulating images?
+"""
+
+
 import os, sys
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
