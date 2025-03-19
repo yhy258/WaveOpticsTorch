@@ -15,11 +15,11 @@ from utils import optical_fft
     3. fflens
 """
 class MultConvergingLens(nn.Module):
-    def __init__(self, ref_idx, focal_length, NA, epsilon=np.finfo(np.float32).eps):
+    def __init__(self, ref_idx, focal_length, D, epsilon=np.finfo(np.float32).eps):
         super(MultConvergingLens, self).__init__()
         self.ref_idx = ref_idx
         self.focal_length = focal_length
-        self.NA = NA
+        self.D = D
         self.epsilon = epsilon
         
         
@@ -33,18 +33,18 @@ class MultConvergingLens(nn.Module):
             field=field,
             ref_idx=self.ref_idx,
             f=self.focal_length,
-            NA=self.NA,
+            D=self.D,
             epsilon=self.epsilon
         )
         
         
 
 class FFLens(nn.Module):
-    def __init__(self, ref_idx, focal_length, NA):
+    def __init__(self, ref_idx, focal_length, D):
         super(FFLens, self).__init__()
         self.ref_idx = ref_idx
         self.focal_length = focal_length
-        self.NA = NA
+        self.D = D
         
     def forward(self, field):
         """
@@ -55,15 +55,15 @@ class FFLens(nn.Module):
             field=field,
             ref_idx=self.ref_idx,
             f=self.focal_length,
-            NA=self.NA
+            D=self.D
         )
         
 class ThinLens(nn.Module):
-    def __init__(self, lens_ref_idx: float, thickness: Tensor, focal_length: float, NA: float):
+    def __init__(self, lens_ref_idx: float, thickness: Tensor, focal_length: float, D: float):
         super(ThinLens).__init__()
         self.lens_ref_idx = lens_ref_idx
         self.focal_length = focal_length
-        self.NA = NA
+        self.D = D
         
         self.register_buffer("thickness", thickness) # Tensor H, W
         
@@ -83,7 +83,7 @@ class ThinLens(nn.Module):
             phase=phase,
             ref_idx=ref_idx,
             f=self.focal_length,
-            NA=self.NA
+            D=self.D
         )
         
 
@@ -109,7 +109,7 @@ class SquarePupil(nn.Module):
         Args:
             width (float):
         """
-        self.sqr_pupil = partial(square_pupil, d=width)
+        self.sqr_pupil = partial(square_pupil, w=width)
     
     def forward(self, field):
         mask = self.sqr_pupil(x_grid=field.x_grid, y_grid=field.y_grid)
@@ -137,7 +137,7 @@ def square_pupil(x_grid, y_grid, w): # w : width
     mask = torch.max(torch.abs(grid), dim=0).values <= w/2
     return mask
 
-def multiplicative_phase_lens(field, ref_idx, f, NA=None, epsilon=np.finfo(np.float32).eps):
+def multiplicative_phase_lens(field, ref_idx, f, D=None, epsilon=np.finfo(np.float32).eps):
     """
         t_l(x,y) = exp(jk/(2f) * (x^2 + y^2))
     """
@@ -154,26 +154,23 @@ def multiplicative_phase_lens(field, ref_idx, f, NA=None, epsilon=np.finfo(np.fl
     
     multp_filter = torch.exp(-1j * multiplicative_phase)
     
-    if NA is not None:
-        D = 2 * f * NA / ref_idx
-        pupil_mask = circular_pupil(field.x_grid, field.y_grid, D)
-        field = field * pupil_mask[None, None, :, :]
+    if D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
     return field * multp_filter
 
 
-def fflens(field, ref_idx, f, NA=None):
-    if NA is not None:
-        D = 2 * f * NA / ref_idx
-        pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
-        field = field * pupil_mask[None, None ,: ,:]
+def fflens(field, ref_idx, f, D=None):
+    if D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
     return optical_fft(field, f, ref_idx) # Output : Field
     
-def phase_mask(field, phase, ref_idx, f, NA=None):
+def phase_mask(field, phase, ref_idx, f, D=None):
     
-    if NA is not None:
-        D = 2 * f * NA / ref_idx
-        pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
-        field = field * pupil_mask[None, None ,: ,:]
+    if D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
     
     if torch.allclose(phase.real, phase):
         phase = torch.exp(1j*phase) # if phase is angle, then transform the angle into phase.

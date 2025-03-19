@@ -6,10 +6,10 @@ from .lenses import circular_pupil
 
 ## This is not learnable.
 class FocusingErrorPhaseMask(nn.Module):
-    def __init__(self, focal_length, defocus, refractive_idx=1., NA=None):
+    def __init__(self, focal_length, defocus, refractive_idx=1., D=None):
         super().__init__()
         self.refractive_idx = refractive_idx
-        self.NA = NA
+        self.D = D
         self.focal_length = focal_length    
         self.defocus = defocus # defocus : 3 channels. / tensor
         
@@ -18,24 +18,22 @@ class FocusingErrorPhaseMask(nn.Module):
         k = 2 * np.pi * self.refractive_idx / field.lamb0[:, None, None]
         phase_error = k * path_length_error
         phase = torch.exp(1j * phase_error)
-        if self.NA is not None:
-            D = 2 * self.focal_length * self.NA / self.refractive_idx
-            pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
+        if self.D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, self.D) # H, W
             field = field * pupil_mask[None, None ,: ,:]
-        
         out = field * phase 
         return out
     
     
 
 class PhaseHyperboloid(nn.Module):
-    def __init__(self, H, W, focal_length, lamb0, refractive_idx, NA, r=1, std=0.1, init_type='uniform', update_scheme='full'):
+    def __init__(self, H, W, focal_length, lamb0, refractive_idx, D, r=1, std=0.1, init_type='uniform', update_scheme='full'):
         super().__init__()
         self.focal_length = focal_length
         self.H, self.W = H, W
         self.refractive_idx = refractive_idx
         self.k = 2 * np.pi * refractive_idx / lamb0 # scalar
-        self.NA = NA
+        self.D = D
         self.update_scheme = update_scheme
         if update_scheme == 'full':
             self.phase = nn.Parameter(torch.empty((1, H, W)))
@@ -67,16 +65,15 @@ class PhaseHyperboloid(nn.Module):
         phase = self.phase + hyp_bolo_phase
         phase = torch.exp(1j * phase)
         
-        if self.NA is not None:
-            D = 2 * self.focal_length * self.NA / self.refractive_idx
-            pupil_mask = circular_pupil(field.x_grid, field.y_grid, D) # H, W
+        if self.D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, self.D) # H, W
             field = field * pupil_mask[None, None ,: ,:]
             
         out = field * phase.unsqueeze(0)
         return out
 
 class PhaseMaskRandom(nn.Module):
-    def __init__(self, grid, init_type='uniform', std=0.1):
+    def __init__(self, grid, D=None, init_type='uniform', std=0.1):
         super().__init__()
         
         if init_type == 'uniform':
@@ -90,6 +87,7 @@ class PhaseMaskRandom(nn.Module):
         
         # nn.Parameter로 등록 -> 학습 가능
         self.phase = nn.Parameter(init_phase)
+        self.D = D
         
     def forward(self, field: torch.Tensor):
         """
@@ -97,12 +95,15 @@ class PhaseMaskRandom(nn.Module):
         """
         # Phase mask = e^(j * self.phase)
         phase = torch.exp(1j * self.phase)[None, None] # 1, 1, H, W
+        if self.D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, self.D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
         out = field * phase
         return out
     
     
 class PhaseMaskZernikeInit(nn.Module):
-    def __init__(self, grid, zernike_modes=[(2,0), (2,2)], 
+    def __init__(self, grid, D, zernike_modes=[(2,0), (2,2)], 
                  coeff_init='random',          
                  ):
         """
@@ -128,6 +129,7 @@ class PhaseMaskZernikeInit(nn.Module):
             total_phase += c_ * Z
     
         self.phase = nn.Parameter(total_phase)
+        self.D = D
         
         self.register_buffer('r', r)
         self.register_buffer('theta', theta)
@@ -142,7 +144,9 @@ class PhaseMaskZernikeInit(nn.Module):
             phase = self.phase
         
         phase_mask = torch.exp(1j * phase)[None, None, :, :]
-        
+        if self.D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, self.D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
         out = field * phase_mask
         return out
     
@@ -151,12 +155,13 @@ class PhaseMaskQuantized(nn.Module):
     - While setting 2D phase as trainable,
     - Let's discretize the phase (emulating SLM, Fab,...)
     """
-    def __init__(self, grid, levels=16):
+    def __init__(self, grid, D, levels=16):
         super().__init__()
         self.levels = levels
         
         init_phase = 2*np.pi*torch.rand_like(grid[0]) # H, W
         self.phase_raw = nn.Parameter(init_phase) 
+        self.D = D
 
     def forward(self, field, modulo: bool = False):
         # (1) [0, 2π) Modular
@@ -172,7 +177,9 @@ class PhaseMaskQuantized(nn.Module):
         
         # Make phase shifter
         phase = torch.exp(1j * phase_quant)
-        
+        if self.D is not None:
+            pupil_mask = circular_pupil(field.x_grid, field.y_grid, self.D) # H, W
+            field = field * pupil_mask[None, None ,: ,:]
         out = field * phase[None, None, :, :] # 1, 1, H, W
         
         return out

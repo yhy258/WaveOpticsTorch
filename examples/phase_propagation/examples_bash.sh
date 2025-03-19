@@ -1,0 +1,4 @@
+CUDA_VISIBLE_DEVICES=1 python aberrated_img.py
+CUDA_VISIBLE_DEVICES=1 python diffraction.py
+CUDA_VISIBLE_DEVICES=1 python sin_amp_talbot.py
+CUDA_VISIBLE_DEVICES=1 python spatial_fltr_psf.py

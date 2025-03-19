@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
-from systems.utils import _pair
+from systems.utils import _pair, D2NA
 
 def nyquist_pixelsize_criterion(NA, lamb):
     max_pixel_size = lamb/(2*NA) # C, Tensor
@@ -34,7 +34,98 @@ def normalize_abs(field):
     min_ch = torch.min(torch.min(field, dim=0, keepdim=True).values, dim=1, keepdim=True).values
     return (field - min_ch) / (max_ch - min_ch)
 
-class AberratedImg(OpticalSystem):
+
+
+"""
+    This class is the streamlined version of the original imaging system ; https://www.spiedigitallibrary.org/journals/advanced-photonics/volume-6/issue-06/066002/Deep-learning-driven-end-to-end-metalens-imaging/10.1117/1.AP.6.6.066002.full
+    I thought this simplified model could emulate the original model...
+    But, when I matched this class's parameters with the original imaging system's parameters
+    there are discrepancies in PSFs' tendencies.
+"""
+# class AberratedImg(OpticalSystem):
+#     def __init__(
+#         self,
+#         pixel_size=[1, 1],
+#         pixel_num=[1000, 1000],
+#         lamb0=[0.455, 0.541, 0.616],
+#         target_lamb0=0.532,
+#         defocus=[], 
+#         refractive_index=1,
+#         paraxial=False,
+#         focal_length=24.5*1e3,
+#         D=10*1e3,
+#         nyquist_spatial_bound=True,
+#     ):
+#         super(AberratedImg, self).__init__(
+#             pixel_size=pixel_size,
+#             pixel_num=pixel_num,
+#             lamb0=lamb0,
+#             refractive_index=refractive_index
+#         )
+#         defocus = torch.tensor(defocus)
+#         focal_length = torch.tensor(focal_length)
+#         NA = D2NA(D, focal_length, refractive_index)
+#         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
+#         print("Max Pixel Size : ", max_pixel_size)
+#         print("Now Pixel Size : ", pixel_size)
+#         if max(pixel_size) > max_pixel_size and nyquist_spatial_bound:
+#             pixel_size = _pair(max_pixel_size)
+#             self.pixel_size = pixel_size
+#             self.init_grid_params()
+        
+#         ### Collimated wave from point source. [ASSUMPTION]
+#         self.source = elem.PlaneSource(
+#             amplitude=1.0,
+#             ref_idx=self.refractive_index,
+#             power=1.0,
+#             dir_factors=None
+#         )
+#         width = min(pixel_num[0] * pixel_size[0], pixel_num[1] * pixel_size[1])
+#         self.circle = elem.CirclePupil(width=width)
+        
+#         ### THIS EMULATES THE METALENS.
+#         self.hyperboloid = elem.PhaseHyperboloid(pixel_num[0], pixel_num[1], refractive_idx=refractive_index, lamb0=target_lamb0, D=D, focal_length=focal_length, init_type='zeros')
+        
+#         self.prop = elem.ASMPropagation(
+#             z=focal_length,
+#             ref_idx=self.refractive_index,
+#             band_limited=True
+#         )
+        
+#         self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
+    
+#     def forward(self):
+#         field = Field(lamb0=self.lamb0, x_grid=self.x_grid, y_grid=self.y_grid, fx_grid=self.fx_grid, fy_grid=self.fy_grid)
+        
+#         src_field = self.source(field)
+#         H, W = src_field.shape[-2:]
+#         src_field = self.circle(src_field)
+#         print(f"Initial Field's shape: {src_field.shape}")
+#         multp_field = self.hyperboloid(src_field)
+        
+#         print(f"Field's shape after lens: {multp_field.shape}")    
+#         prop_field = self.prop(multp_field) # asm
+#         if isinstance(prop_field, list) or isinstance(prop_field, tuple): # SASPropagation.
+#             prop_field, pixel_size = prop_field
+#         print(f"Field's shape after propagation: {prop_field.shape}")
+#         out = self.sensor(prop_field)
+#         print(f"Output Field's shape : {out.shape}")
+#         return src_field.field, multp_field.field, None, prop_field.field, out
+
+"""
+    Spatially filtered PSF.
+    Paper: https://www.spiedigitallibrary.org/journals/advanced-photonics/volume-6/issue-06/066002/Deep-learning-driven-end-to-end-metalens-imaging/10.1117/1.AP.6.6.066002.full
+    1. Achromatic doublet(Thorlabs: AC127-019-A) - f = 19 mm (12.7mm diameter)
+    2. 20µm pinhole
+    3. Spherical Lens (Thorlabs: LA1461-A - N-BK7 Plano-Convex Lens) - f = 250 mm (25.4 mm diameter)
+    ### Collimated.
+    4. Phase modulation.. Note that this doesn't represent the phase modulation of the metalens in the paper.
+    ### Just emulating the process.. If we train the learnable parameter in the phase mask module, then we may fit the phase profile with metalens
+    ### But it is impossible to perfectly emulate the metalens's phase profile,  
+        because the PSF imaging simulation hypothesize spatially invariant degradation and 
+        this wave optics setting may make it hard to train the sub-wavelength characteristics of the metalens.
+"""
+class OGAberratedImg(OpticalSystem):
     def __init__(
         self,
         pixel_size=[1, 1],
@@ -44,19 +135,22 @@ class AberratedImg(OpticalSystem):
         defocus=[], 
         refractive_index=1,
         paraxial=False,
-        focal_length=19*1e3,
-        NA=0.3,
+        focal_lengths=[19*1e3, 250*1e3, 24.5*1e3],
+        Ds=[12.7*1e3, 25.4*1e3, 10*1e3],
+        pinhole_width=20,
         nyquist_spatial_bound=True,
     ):
-        super(AberratedImg, self).__init__(
+        super(OGAberratedImg, self).__init__(
             pixel_size=pixel_size,
             pixel_num=pixel_num,
             lamb0=lamb0,
             refractive_index=refractive_index
         )
         defocus = torch.tensor(defocus)
-        focal_length = torch.tensor(focal_length)
-        
+        focal_lengths = torch.tensor(focal_lengths)
+        Ds = torch.tensor(Ds)
+        NA = D2NA(Ds, focal_lengths, refractive_index)
+        NA = torch.max(NA)
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
         print("Now Pixel Size : ", pixel_size)
@@ -66,21 +160,40 @@ class AberratedImg(OpticalSystem):
             self.init_grid_params()
         
         ### Collimated wave from point source. [ASSUMPTION]
-        self.source = elem.PlaneSource(
+        self.source = elem.PointSource(
             amplitude=1.0,
             ref_idx=self.refractive_index,
             power=1.0,
-            dir_factors=None
+            z=focal_lengths[0],
+            src_loc=None
         )
         width = min(pixel_num[0] * pixel_size[0], pixel_num[1] * pixel_size[1])
         self.circle = elem.CirclePupil(width=width)
-        # 이 circle pupil이 들어간 이유는, digital 상의 grid의 크기가 lens diameter보다 훨씬 작아서 
-        # 이 circle pupil을 취하지 않으면 사각형 형태의 PSF가 나오게됨.
         
-        self.hyperboloid = elem.PhaseHyperboloid(pixel_num[0], pixel_num[1], refractive_idx=refractive_index, lamb0=target_lamb0, NA=NA, focal_length=focal_length, init_type='zeros')
+        ### THIS EMULATES THE METALENS.
+        self.lens1 = elem.MultConvergingLens(ref_idx=refractive_index, focal_length=focal_lengths[0], D=Ds[0])
+        self.prop1 = elem.ASMPropagation(
+            z=focal_lengths[0],
+            ref_idx=self.refractive_index,
+            band_limited=True
+        )
         
-        self.prop = elem.ASMPropagation(
-            z=focal_length,
+        self.pinhole = elem.CirclePupil(width=pinhole_width)
+        self.prop2 = elem.ASMPropagation(
+            z=focal_lengths[1],
+            ref_idx=self.refractive_index,
+            band_limited=True
+        )
+        self.lens2 = elem.MultConvergingLens(ref_idx=refractive_index, focal_length=focal_lengths[1], D=Ds[1])
+        # prop2
+        
+        """
+            Hyperboloid만 사용해도 자연스럽게 chromatic aberration이 고려되는가?
+        """
+        self.hyperboloid = elem.PhaseHyperboloid(pixel_num[0], pixel_num[1], refractive_idx=refractive_index, lamb0=target_lamb0, D=Ds[2], focal_length=focal_lengths[2], init_type='zeros')
+        
+        self.prop3 = elem.ASMPropagation(
+            z=focal_lengths[2],
             ref_idx=self.refractive_index,
             band_limited=True
         )
@@ -94,24 +207,40 @@ class AberratedImg(OpticalSystem):
         H, W = src_field.shape[-2:]
         src_field = self.circle(src_field)
         print(f"Initial Field's shape: {src_field.shape}")
-        multp_field = self.hyperboloid(src_field)
         
-        print(f"Field's shape after lens: {multp_field.shape}")    
-        prop_field = self.prop(multp_field) # asm
-        if isinstance(prop_field, list) or isinstance(prop_field, tuple): # SASPropagation.
-            prop_field, pixel_size = prop_field
-        print(f"Field's shape after propagation: {prop_field.shape}")
-        out = self.sensor(prop_field)
+        lens1_field = self.lens1(src_field)
+        prop1_field = self.prop1(lens1_field)
+        pinhole_field = self.pinhole(prop1_field)
+        
+        prop2_field = self.prop2(pinhole_field)
+        lens2_field = self.lens2(prop2_field)
+        prop2_2_field = self.prop2(lens2_field)
+        
+        mod_field = self.hyperboloid(prop2_2_field)
+        prop3_field = self.prop3(mod_field)
+        
+        out = self.sensor(prop3_field)
         print(f"Output Field's shape : {out.shape}")
-        return src_field.field, multp_field.field, None, prop_field.field, out
-    
-
+        return src_field.field, lens1_field.field, lens2_field.field, mod_field.field, out
 
 if __name__ == "__main__":
     
-    device = 'cuda:3'
+    device = 'cuda'
     #### This setting is the DRMI paper parameters. (approximated values)
-    Prop = AberratedImg(
+    # Prop = AberratedImg(
+    #         pixel_size=[1, 1],
+    #         pixel_num=[500, 500],
+    #         lamb0=[0.450, 0.532, 0.635],
+    #         target_lamb0=0.532,
+    #         defocus=[29*1e3, 24.5*1e3, 20.5*1e3],
+    #         refractive_index=1,
+    #         paraxial=False,
+    #         focal_length=24.5*1e3,
+    #         D=10*1e3,
+    #         nyquist_spatial_bound=True
+    # ).to(device)
+    
+    Prop = OGAberratedImg(
             pixel_size=[0.5, 0.5],
             pixel_num=[1000, 1000],
             lamb0=[0.450, 0.532, 0.635],
@@ -119,11 +248,12 @@ if __name__ == "__main__":
             defocus=[29*1e3, 24.5*1e3, 20.5*1e3],
             refractive_index=1,
             paraxial=False,
-            focal_length=24.5*1e3,
-            NA=0.2,
+            focal_lengths=[19*1e3, 250*1e3, 24.5*1e3],
+            Ds=[12.7*1e3, 25.4*1e3, 10*1e3],
+            pinhole_width=20,
             nyquist_spatial_bound=True
     ).to(device)
-    src_field, multp_field, focus_errored_field, prop_field, out = Prop()   
+    src_field, lens1_field, lens2_field, mod_field, out = Prop()   
     
     x_grid, y_grid = Prop.x_grid, Prop.y_grid
     radial_grid = x_grid ** 2 + y_grid ** 2
@@ -156,14 +286,17 @@ if __name__ == "__main__":
     file_name_format = "{}_field_{}.png"
     title_format = "{} field of Lambda : {}"
     
-    visualize(file_name_format.format('multp_field', torch.round(lamb0[0]/Prop.nanometers)), multp_field[0, 0], title=title_format.format("multp_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
-    visualize(file_name_format.format('prop_field', torch.round(lamb0[0]/Prop.nanometers)), prop_field[0, 0], title=title_format.format("prop_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens1_field', torch.round(lamb0[0]/Prop.nanometers)), lens1_field[0, 0], title=title_format.format("lens1_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens2_field', torch.round(lamb0[0]/Prop.nanometers)), lens2_field[0, 0], title=title_format.format("lens2_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('modulated_field', torch.round(lamb0[0]/Prop.nanometers)), mod_field[0, 0], title=title_format.format("modulated_field", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
     
-    visualize(file_name_format.format('multp_field', torch.round(lamb0[1]/Prop.nanometers)), multp_field[0, 1], title=title_format.format("multp_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
-    visualize(file_name_format.format('prop_field', torch.round(lamb0[1]/Prop.nanometers)), prop_field[0, 1], title=title_format.format("prop_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens1_field', torch.round(lamb0[1]/Prop.nanometers)), lens1_field[0, 1], title=title_format.format("lens1_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens2_field', torch.round(lamb0[1]/Prop.nanometers)), lens2_field[0, 1], title=title_format.format("lens2_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('modulated_field', torch.round(lamb0[1]/Prop.nanometers)), mod_field[0, 1], title=title_format.format("modulated_field", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')
     
-    visualize(file_name_format.format('multp_field', torch.round(lamb0[2]/Prop.nanometers)), multp_field[0, 2], title=title_format.format("multp_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
-    visualize(file_name_format.format('prop_field', torch.round(lamb0[2]/Prop.nanometers)), prop_field[0, 2], title=title_format.format("prop_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens1_field', torch.round(lamb0[2]/Prop.nanometers)), lens1_field[0, 2], title=title_format.format("lens1_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('lens2_field', torch.round(lamb0[2]/Prop.nanometers)), lens2_field[0, 2], title=title_format.format("lens2_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
+    visualize(file_name_format.format('modulated_field', torch.round(lamb0[2]/Prop.nanometers)), mod_field[0, 2], title=title_format.format("modulated_field", torch.round(lamb0[2]/Prop.nanometers)), mode='angle')
 
     visualize(file_name_format.format('source', torch.round(lamb0[0]/Prop.nanometers)), src_field[0, 0], title=title_format.format("Source", torch.round(lamb0[0]/Prop.nanometers)), mode='angle')
     visualize(file_name_format.format('source', torch.round(lamb0[1]/Prop.nanometers)), src_field[0, 1], title=title_format.format("Source", torch.round(lamb0[1]/Prop.nanometers)), mode='angle')

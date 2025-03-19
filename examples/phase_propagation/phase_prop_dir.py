@@ -10,7 +10,7 @@ import torch
 from torch.functional import Tensor
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
-from systems.utils import _pair
+from systems.utils import _pair, NA2D
 import matplotlib.pyplot as plt
 import time
 import matplotlib.animation as animation
@@ -50,6 +50,7 @@ class LensPropagation(OpticalSystem):
             refractive_index=refractive_index
         )
         self.z = z
+        D = NA2D(NA, focal_length=z, ref_idx=refractive_index)
         
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
@@ -68,7 +69,7 @@ class LensPropagation(OpticalSystem):
             power=1.0,
         )
         # self.pupil_mask = elem.CirclePupil(self.x_grid, self.y_grid, pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
-        self.mid_lens = elem.MultConvergingLens(ref_idx=self.refractive_index, focal_length=z, NA=NA)
+        self.mid_lens = elem.MultConvergingLens(ref_idx=self.refractive_index, focal_length=z, D=D)
         
         
         self.prop = elem.ASMPropagation(
@@ -155,7 +156,7 @@ def iterative_perform(save_root, file_name, device):
     plt.clf()
     
 if __name__ == "__main__":
-    device = 'cuda:7'
+    device = 'cuda'
     
     base_save_root = "./phase_prop_vis/phase_prop_dir"
     os.makedirs(base_save_root, exist_ok=True)

@@ -10,7 +10,7 @@ import torch
 from torch.functional import Tensor
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
-from systems.utils import _pair
+from systems.utils import _pair, NA2D
 import matplotlib.pyplot as plt
 import time
 import matplotlib.animation as animation
@@ -73,6 +73,8 @@ class Diffraction(OpticalSystem):
         self.pupil_type = pupil_type
         self.z = z
         
+        # D = NA2D(NA)
+        
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
         print("Now Pixel Size : ", pixel_size)
@@ -89,7 +91,7 @@ class Diffraction(OpticalSystem):
             dir_factors=None, # center.
             power=1.0,
         )
-        self.pupil_mask = elem.CirclePupil(pupil_width) if pupil_type=='circle' else elem.SquarePupil(self.x_grid, self.y_grid, pupil_width)
+        self.pupil_mask = elem.CirclePupil(pupil_width) if pupil_type=='circle' else elem.SquarePupil(pupil_width)
         
         self.prop = elem.ASMPropagation(
             z=z,
@@ -315,7 +317,7 @@ def f_num_iterative_perform(save_root, file_name, device):
         
         
 if __name__ == "__main__":
-    device = 'cuda:7'
+    device = 'cuda'
     
     base_save_root = "./phase_prop_vis/diffraction"
     os.makedirs(base_save_root, exist_ok=True)

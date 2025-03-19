@@ -10,6 +10,13 @@ import torch.nn.functional as F
 NP_DTYPE = np.complex64
 T_DTYPE = torch.float32
 
+def D2NA(D, focal_length, ref_idx):
+    NA = D*ref_idx / (2*focal_length)
+    return NA
+
+def NA2D(NA, focal_length, ref_idx):
+    D = 2 * NA * focal_length / ref_idx
+    return D
 
 def _list(x, repetitions=1):
     if hasattr(x, "__iter__") and not isinstance(x, str):

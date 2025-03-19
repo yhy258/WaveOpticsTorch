@@ -100,7 +100,7 @@ class SinAmplitudeImage(OpticalSystem):
     
         
 if __name__ == "__main__":
-    device = 'cuda:7'
+    device = 'cuda'
     
     base_save_root = "./phase_prop_vis/talbot"
     os.makedirs(base_save_root, exist_ok=True)

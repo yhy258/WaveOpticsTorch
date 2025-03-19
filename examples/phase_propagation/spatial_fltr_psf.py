@@ -5,7 +5,7 @@ sys.path.insert(
 import torch
 import systems.elements as elem
 from systems.systems import OpticalSystem, Field
-from systems.utils import _pair
+from systems.utils import _pair, NA2D
 
 
 def nyquist_pixelsize_criterion(NA, lamb):
@@ -33,7 +33,7 @@ class SpatialFilteredPSF(OpticalSystem):
             refractive_index=refractive_index
         )
         
-        
+        D = NA2D(NA, focal_length=focal_length, ref_idx=refractive_index)
         max_pixel_size = nyquist_pixelsize_criterion(NA, self.lamb0/self.refractive_index)
         print("Max Pixel Size : ", max_pixel_size)
         print("Now Pixel Size : ", pixel_size)
@@ -54,7 +54,7 @@ class SpatialFilteredPSF(OpticalSystem):
         self.lens = elem.MultConvergingLens(
             ref_idx=self.refractive_index,
             focal_length=focal_length,
-            NA=NA
+            D=D
         ) # including pupil func
         
         self.prop = elem.ASMPropagation(
@@ -69,7 +69,7 @@ class SpatialFilteredPSF(OpticalSystem):
         self.fflens = elem.FFLens(
             ref_idx=self.refractive_index,
             focal_length=focal_length,
-            NA=NA
+            D=D
         )
         
         self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
@@ -157,7 +157,7 @@ def iterative_perform(save_root, file_name, device):
 
 if __name__ == "__main__":
     
-    device = 'cuda:7'
+    device = 'cuda'
     Prop = SpatialFilteredPSF(
             pixel_size=[1, 1],
             pixel_num=[1000, 1000],
