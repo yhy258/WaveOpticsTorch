@@ -74,6 +74,12 @@ def forward(self):
     - You have to first define the Field instance. In the Field instance, the internal components (e.g. field tensor and grid tensor) are updated during performing the given operations.  
     - The field is initially updated from the defined source!  
 
+## Contributors
+- Joonhyuk Seo: [@yhy258](https://github.com/yhy258)
+- Chanik Kang: [@latteishorse](https://github.com/latteishorse)
+
+## Contact
+Feel free to reach me out through (joonhyuk.seow@gmail.com).  
 
 
 ## TODO List
@@ -86,7 +92,3 @@ def forward(self):
 - [ ] Considering shifted locations of sources or fields.  
 - [ ] Considering various directions of the input fields.  
 - [ ] More various examples.  
-
-## Examples
-1. Spatially filtered PSF using the pinhole.
-2. Analyzing the diffraction pattern from the circle and square apertures.
