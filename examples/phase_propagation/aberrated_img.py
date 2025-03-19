@@ -243,7 +243,6 @@ if __name__ == "__main__":
     """
         1. The grid size should be sufficiently large to cover the entire transverse propagation space.
         2. The transverse space of the propagation after pinhole is propotional to lambda and z, and inversely proportional to pinhole's width.
-    
     """
     Prop = OGAberratedImg(
             pixel_size=[0.8, 0.8],
@@ -255,7 +254,7 @@ if __name__ == "__main__":
             paraxial=False,
             focal_lengths=[19*1e3, 19*1e3, 24.5*1e3],
             Ds=[10*1e3, 10*1e3, 10*1e3],
-            pinhole_width=20,
+            pinhole_width=0,
             nyquist_spatial_bound=True
     ).to(device)
     src_field, lens1_field, lens2_field, mod_field, out = Prop()   

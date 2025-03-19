@@ -128,13 +128,13 @@ class CustomPupil(nn.Module):
 def circular_pupil(x_grid, y_grid, d): # d is the diameter
     # grid: (H, 1) and (1, W)
     l2norm_grid = x_grid ** 2 + y_grid ** 2
-    mask = l2norm_grid <= (d/2)**2
+    mask = l2norm_grid < (d/2)**2
     return mask
     
 def square_pupil(x_grid, y_grid, w): # w : width
     
     grid = torch.stack(torch.meshgrid(x_grid.squeeze(), y_grid.squeeze(), indexing='ij'), dim=0)
-    mask = torch.max(torch.abs(grid), dim=0).values <= w/2
+    mask = torch.max(torch.abs(grid), dim=0).values < w/2
     return mask
 
 def multiplicative_phase_lens(field, ref_idx, f, D=None, epsilon=np.finfo(np.float32).eps):
