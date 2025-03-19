@@ -129,14 +129,14 @@ class OGAberratedImg(OpticalSystem):
     def __init__(
         self,
         pixel_size=[1, 1],
-        pixel_num=[1000, 1000],
+        pixel_num=[1500, 1500],
         lamb0=[0.455, 0.541, 0.616],
         target_lamb0=0.532,
         defocus=[], 
         refractive_index=1,
         paraxial=False,
         focal_lengths=[19*1e3, 250*1e3, 24.5*1e3],
-        Ds=[12.7*1e3, 25.4*1e3, 10*1e3],
+        Ds=[12.7*1e3, 25.4*1e3, 10*1e3], ### diameter를 감쌀 수 있을 정도의 grid를 형성시켜줘야하지 않은가?
         pinhole_width=20,
         nyquist_spatial_bound=True,
     ):
@@ -205,7 +205,7 @@ class OGAberratedImg(OpticalSystem):
         
         src_field = self.source(field)
         H, W = src_field.shape[-2:]
-        src_field = self.circle(src_field)
+        # src_field = self.circle(src_field)
         print(f"Initial Field's shape: {src_field.shape}")
         
         lens1_field = self.lens1(src_field)
@@ -240,16 +240,21 @@ if __name__ == "__main__":
     #         nyquist_spatial_bound=True
     # ).to(device)
     
+    """
+        1. The grid size should be sufficiently large to cover the entire transverse propagation space.
+        2. The transverse space of the propagation after pinhole is propotional to lambda and z, and inversely proportional to pinhole's width.
+    
+    """
     Prop = OGAberratedImg(
-            pixel_size=[0.5, 0.5],
-            pixel_num=[1000, 1000],
+            pixel_size=[0.8, 0.8],
+            pixel_num=[2000, 2000],
             lamb0=[0.450, 0.532, 0.635],
             target_lamb0=0.532,
             defocus=[29*1e3, 24.5*1e3, 20.5*1e3],
             refractive_index=1,
             paraxial=False,
-            focal_lengths=[19*1e3, 250*1e3, 24.5*1e3],
-            Ds=[12.7*1e3, 25.4*1e3, 10*1e3],
+            focal_lengths=[19*1e3, 19*1e3, 24.5*1e3],
+            Ds=[10*1e3, 10*1e3, 10*1e3],
             pinhole_width=20,
             nyquist_spatial_bound=True
     ).to(device)
