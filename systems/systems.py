@@ -80,42 +80,42 @@ class OpticalSystem(nn.Module):
         # define those with frequency instead of wavevector
         return set_freq_grid(self.pixel_num[0], self.pixel_num[1], self.pixel_size[0], self.pixel_size[1])
 
-    def sas_rev_calculate_grids(self, zs: list):
-        ### grid and f_grid are already defined as the sensor grid:
-        """
-        Args:
-            zs (list): The propagation distance used in [SASPropagation].
-                        (from starting point to end point in optical system.)
-        """
-        zs = _list(zs)
+    # def sas_rev_calculate_grids(self, zs: list):
+    #     ### grid and f_grid are already defined as the sensor grid:
+    #     """
+    #     Args:
+    #         zs (list): The propagation distance used in [SASPropagation].
+    #                     (from starting point to end point in optical system.)
+    #     """
+    #     zs = _list(zs)
         
-        def calculate_sas_prev_grid(H, W, dx, dy, z):
-            """
-            Args: The grid parameters of scalable ASM's output.
-                H (int): Pixel num
-                W (int): Pixel num
-                dx (float): Pixel size
-                dy (float): Pixel size
-                z (float): Propagation distance
-            """
-            prev_Lx = self.lamb * z * H / (2 * H * dx)
-            prev_Ly = self.lamb * z * W / (2 * W * dy)
-            prev_dx, prev_dy = prev_Lx/H, prev_Ly/W
-            return prev_Lx, prev_Ly, prev_dx, prev_dy
+    #     def calculate_sas_prev_grid(H, W, dx, dy, z):
+    #         """
+    #         Args: The grid parameters of scalable ASM's output.
+    #             H (int): Pixel num
+    #             W (int): Pixel num
+    #             dx (float): Pixel size
+    #             dy (float): Pixel size
+    #             z (float): Propagation distance
+    #         """
+    #         prev_Lx = self.lamb * z * H / (2 * H * dx)
+    #         prev_Ly = self.lamb * z * W / (2 * W * dy)
+    #         prev_dx, prev_dy = prev_Lx/H, prev_Ly/W
+    #         return prev_Lx, prev_Ly, prev_dx, prev_dy
             
-        ##### sensor layer's grid (Target grid)
-        Lx, Ly = self.Lx, self.Ly
-        H, W = self.pixel_num[0], self.pixel_num[1]
-        dx, dy = self.pixel_size[0], self.pixel_size[1]
-        for z in reversed(zs): # last부터 거꾸로...
-            Lx, Ly, dx, dy = calculate_sas_prev_grid(H, W, dx, dy, z)
+    #     ##### sensor layer's grid (Target grid)
+    #     Lx, Ly = self.Lx, self.Ly
+    #     H, W = self.pixel_num[0], self.pixel_num[1]
+    #     dx, dy = self.pixel_size[0], self.pixel_size[1]
+    #     for z in reversed(zs): # last부터 거꾸로...
+    #         Lx, Ly, dx, dy = calculate_sas_prev_grid(H, W, dx, dy, z)
         
-        ### make source grid
-        self.pixel_size = [dx, dy]
-        self.Lx, self.Ly = Lx, Ly
+    #     ### make source grid
+    #     self.pixel_size = [dx, dy]
+    #     self.Lx, self.Ly = Lx, Ly
         
-        self.x_grid, self.y_grid = self.set_grid()
-        self.fx_grid, self.fy_grid = self.set_fgrid()
+    #     self.x_grid, self.y_grid = self.set_grid()
+    #     self.fx_grid, self.fy_grid = self.set_fgrid()
         #### Setting self.grid and self.f_grid as Source's grid and f_grid
         #### After applying several scalable ASM, then the functions would outcome each output's grid.
         
