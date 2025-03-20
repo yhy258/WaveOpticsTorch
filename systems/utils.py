@@ -175,7 +175,7 @@ def double_unpadnd(x, n=2):
     return x
     
 def padded_fftnd(x, n=2):
-    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    transform_dims = (-np.arange(1, n+1)[::-1]).tolist()
     x = double_padnd(x, n=n)
     fx = torch.fft.fftn(x, dim=transform_dims)
     return fx
@@ -189,12 +189,12 @@ def unpadded_ifftnd(fx, n=2):
 ###### CONVOLUTION THEOREM
 # a is sample, and b is psf.
 # Successfully verified this (The use of rfft and irfft)
-def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
+def fftconv2d(img, psf, fa=None, fb=None, shape='same', fftsize=None):
     # sample : B, C, H, W or B, C, D, H, W = a
     # psf : D, N, N = b
     
-    asize = a.size()
-    bsize = b.size()
+    asize = img.size()
+    bsize = psf.size()
     
     if fftsize == None:
         # The added size.
@@ -205,21 +205,21 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
         
         fa = torch.fft.rfft2(
             F.pad(
-                a, (0, fftsize[-1] - asize[-1], 0, fftsize[-2] - asize[-2])
-            ), dim=[-2, -1]
+                img, (0, fftsize[-1] - asize[-1], 0, fftsize[-2] - asize[-2])
+            ), dim=[-2, -1], norm='ortho'
         )
     if fb is None:
         paded_b = F.pad(
-            b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
+            psf, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
         )
     
-        fb = torch.fft.rfft2(paded_b)
+        fb = torch.fft.rfft2(paded_b, norm='ortho')
         
         # fb = filter_IEEE_error(F.pad(
         #         b, (0, fftsize[-1] - bsize[-1], 0, fftsize[-2] - bsize[-2])
         #     ), fb)
         fb = filter_IEEE_error(paded_b, fb)
-    ab = torch.fft.irfft2(fa * fb, dim=(-2, -1), s=fftsize)
+    ab = torch.fft.irfft2(fa * fb, dim=(-2, -1), s=fftsize, norm='ortho')
     
     
     # crop based on shape
@@ -250,10 +250,9 @@ def fftconv2d(a, b, fa=None, fb=None, shape='same', fftsize=None):
 def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
     # sample : B, C, H, W or B, C, D, H, W = a
     # psf : D, N, N = b
-    transform_dims = -np.arange(1, n+1)[::-1].tolist()
+    transform_dims = (-np.arange(1, n+1)[::-1]).tolist()
     asize = a.size()[::-1][:n]
     bsize = b.size()[::-1][:n]
-    
     if fftsize == None:
         # The added size.
         fftsize = [asz + bsz - 1 for asz, bsz in zip(asize, bsize)]
@@ -276,8 +275,7 @@ def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
         
         fb = filter_IEEE_error(paded_b, fb)
         
-    ab = torch.fft.irfftn(fa * fb, dim=transform_dims, s=fftsize)
-    
+    ab = torch.fft.irfftn(fa * fb, dim=transform_dims, s=fftsize[::-1])
     
     # crop based on shape
     if shape in "same":

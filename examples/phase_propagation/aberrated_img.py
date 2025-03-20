@@ -254,7 +254,7 @@ if __name__ == "__main__":
             paraxial=False,
             focal_lengths=[19*1e3, 19*1e3, 24.5*1e3],
             Ds=[10*1e3, 10*1e3, 10*1e3],
-            pinhole_width=0,
+            pinhole_width=20,
             nyquist_spatial_bound=True
     ).to(device)
     src_field, lens1_field, lens2_field, mod_field, out = Prop()   

@@ -56,10 +56,6 @@ class SASPropagation(nn.Module):
         return output_field, pixel_sizes
 
 
-# def asm_propagation(input_field: Tensor, propagator: Tensor):
-#     input_field = double_padnd(input_field, n=2)
-#     return field_propagate(input_field, propagator, ndim=2) # this function includes padding operations to alleviate circular convolution.
-
 def asm_propagator(field: Field, z: float, n: float):
     # input_field : B, C,.. , H, W, ; complex tensor
     # lamb: Tensor, C,
