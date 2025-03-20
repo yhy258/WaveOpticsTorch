@@ -18,7 +18,7 @@ We conducted the experiments to analyze the influence of the chromatic aberratio
 
 The x-axis of the figures below is the optical system's wavelength parameter for the experiment. Plus, we set the target wavelength as 0.532 (µm). 
 
-### 1. Proper Simulation Field (sufficient pixel_num)
+### 1. Proper Simulation Field
     pixel_size=[0.8, 0.8],
     pixel_num=[2000, 2000],
     target_lamb0=0.532,
@@ -34,8 +34,10 @@ The x-axis of the figures below is the optical system's wavelength parameter for
     <img src="./figures/aberrated_img/fig1.png" width="600">
 </div>
 
+- In this setting, the defined system's grid can cover the all transverse areas of the pupils.  
+($2000*0.8 > 10*1000$)
 
-### 2. Inadequate Simulation Field (insufficient pixel_num)
+### 2. Inadequate Simulation Field
     pixel_size=[0.5, 0.5],
     pixel_num=[1000, 1000],
     target_lamb0=0.532,
@@ -50,3 +52,6 @@ The x-axis of the figures below is the optical system's wavelength parameter for
 <div align="center">
     <img src="./figures/aberrated_img/fig2.png" width="600">
 </div>
+
+- In this setting, the defined system's grid cannot sufficiently cover the all transverse areas of the pupils  
+($1000\times0.5 << 25.4*1000$.)
