@@ -13,10 +13,14 @@ Paper: https://www.spiedigitallibrary.org/journals/advanced-photonics/volume-6/i
 
 ## Experiments
 
+We conducted the experiments to analyze the influence of the chromatic aberration on the PSF intensity because there is a significant difference among the PSF intensities of the various target wavelength parameters.  
+
+
+The x-axis of the figures below is the optical system's wavelength parameter for the experiment. Plus, we set the target wavelength as 0.532 (µm). 
+
 ### 1. Proper Simulation Field (sufficient pixel_num)
     pixel_size=[0.8, 0.8],
     pixel_num=[2000, 2000],
-    lamb0=[0.450, 0.532, 0.635],
     target_lamb0=0.532,
     defocus=[29*1e3, 24.5*1e3, 20.5*1e3],
     refractive_index=1,
@@ -34,7 +38,6 @@ Paper: https://www.spiedigitallibrary.org/journals/advanced-photonics/volume-6/i
 ### 2. Inadequate Simulation Field (insufficient pixel_num)
     pixel_size=[0.5, 0.5],
     pixel_num=[1000, 1000],
-    lamb0=[0.450, 0.532, 0.635],
     target_lamb0=0.532,
     defocus=[29*1e3, 24.5*1e3, 20.5*1e3],
     refractive_index=1,
