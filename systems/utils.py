@@ -297,8 +297,8 @@ def fftconvnd(a, b, n=3, fa=None, fb=None, shape='same', fftsize=None):
 ###### Optical fft for 2F lens system... (Input is the collimated light)
 
 
-def shifted_fft(x, spatial_dims=(-2, -1)):
-    fft = partial(torch.fft.fft2, dim=spatial_dims)
+def shifted_fft(x, spatial_dims=(-2, -1), inv=False):
+    fft = partial(torch.fft.fft2, dim=spatial_dims) if not inv else partial(torch.fft.ifft2, dim=spatial_dims)
     ifftshift = partial(torch.fft.ifftshift, dim=spatial_dims)
     fftshift = partial(torch.fft.fftshift, dim=spatial_dims) 
 

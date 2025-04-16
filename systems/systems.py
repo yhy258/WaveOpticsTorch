@@ -378,11 +378,11 @@ class Field:
     
     @property
     def Lx(self):
-        return self.dx * self.field[-2]
+        return self.dx * self.field.shape[-2]
 
     @property
     def Ly(self):
-        return self.dy * self.field[-1]
+        return self.dy * self.field.shape[-1]
 
     @property
     def dfx(self):

@@ -58,6 +58,7 @@ class Diffraction(OpticalSystem):
         pixel_num=[1000, 1000],
         lamb0=[0.55, 1.05, 1.550],
         refractive_index=1,
+        propagation_type='asm',
         z=19*1e3,
         NA=0.3,
         pupil_type='circle',
@@ -92,14 +93,20 @@ class Diffraction(OpticalSystem):
             power=1.0,
         )
         self.pupil_mask = elem.CirclePupil(pupil_width) if pupil_type=='circle' else elem.SquarePupil(pupil_width)
+        if propagation_type == 'asm':
+            self.prop = elem.ASMPropagation(
+                z=z,
+                ref_idx=self.refractive_index,
+                band_limited=True
+            )
+        elif propagation_type == 'dsf':
+            self.prop = elem.DSFPropagation(
+                z=z,
+                ref_idx=self.refractive_index,
+                band_limited=True
+            )
         
-        self.prop = elem.ASMPropagation(
-            z=z,
-            ref_idx=self.refractive_index,
-            band_limited=True
-        )
-        
-        self.sensor = elem.Sensor(shot_noise_modes=[], clip=[1e-20, 1e+9], channel_sum=False)    
+        self.sensor = elem.Sensor(shot_noise_modes=[], clip=[0, 1e+9], channel_sum=False)    
     
     def forward(self):
         
@@ -110,7 +117,7 @@ class Diffraction(OpticalSystem):
         pupiled_field = self.pupil_mask(src_field)
         print(f"Field's shape after {self.pupil_type} pupil: {pupiled_field.shape}")    
         prop_field = self.prop(pupiled_field) # asm
-        if isinstance(prop_field, list) or isinstance(prop_field, tuple): # SASPropagation.
+        if isinstance(prop_field, list) or isinstance(prop_field, tuple):
             prop_field, pixel_size = prop_field
         print(f"Field's shape after propagation: {prop_field.shape}")
         out = self.sensor(prop_field)
@@ -127,9 +134,10 @@ class Diffraction(OpticalSystem):
 def make_kwargs(lamb0, diameter, pupil_type, z=None):
     this_kwargs = dict(
         pixel_size=[0.6, 0.6],
-        pixel_num=[500, 500],
+        pixel_num=[1000, 1000],
         lamb0=[lamb0],
         refractive_index=1,
+        propagation_type='dsf',
         z=10*1e3 if z == None else z,
         NA=0.3,
         pupil_type=pupil_type,
@@ -156,7 +164,6 @@ def iterative_perform_(kwargss: list, device, sqr_fresnel_case=False):
         f_num = f_number(diameter, lamb0[0], z)
         dict_key = f"fnum{str(round(f_num, 1))}_z{str(round(z, 1))}_d{str(round(diameter, 1))}_lamb0{lamb0[0]}_{pt}pup"
         outs[dict_key] = out
-        
         
         if sqr_fresnel_case:
             fresnel_out = fresnel_diffraction_square_aperture(width=diameter, x_grid=Prop.x_grid, y_grid=Prop.y_grid, lamb=lamb0[0], z=z)
@@ -319,7 +326,7 @@ def f_num_iterative_perform(save_root, file_name, device):
 if __name__ == "__main__":
     device = 'cuda'
     
-    base_save_root = "./phase_prop_vis/diffraction"
+    base_save_root = "./phase_prop_vis/diffraction_dsf"
     os.makedirs(base_save_root, exist_ok=True)
     
     ### visualize function
@@ -337,7 +344,7 @@ if __name__ == "__main__":
         plt.savefig(os.path.join(save_root, file_name))
         plt.clf()
     for pupil_type in ['square', 'circle']:
-        for device in ['cuda:7', 'cpu']:
+        for device in ['cuda:6']:
             save_root = os.path.join(base_save_root, pupil_type)
             os.makedirs(save_root, exist_ok=True)
             Prop = Diffraction(
@@ -345,6 +352,7 @@ if __name__ == "__main__":
                     pixel_num=[1000, 1000],
                     lamb0=[0.4, 0.55, 0.7],
                     refractive_index=1,
+                    propagation_type='dsf',
                     z=10*1e3,
                     NA=0.3,
                     pupil_type=pupil_type,
